@@ -2120,6 +2120,13 @@ impl VaultRegistry {
     /// dispute first, and `Tombstoned` resources are terminal — reactivation
     /// from either fails with `InvalidLifecycleTransition`.
     ///
+    /// Reconciliation rule for an active moderator dispute flag: a resource
+    /// whose `dispute_flag` is set is mid-moderator-dispute, and relisting it
+    /// as `Listed` would be ambiguous. The creator cannot clear the flag by
+    /// reactivating — a moderator must call `unflag_resource` first, after
+    /// which reactivation succeeds as normal. Until then the call fails with
+    /// `InvalidLifecycleTransition`.
+    ///
     /// Mirrors `set_listed(id, true)` for the `Delisted` case but is the only
     /// creator path out of `Frozen`, and always flips the `listed` projection
     /// and listed-count index back to active.
@@ -2129,7 +2136,8 @@ impl VaultRegistry {
     /// Errors deterministically:
     /// - [`Error::Unauthorized`] — caller is not the resource creator
     /// - [`Error::InvalidLifecycleTransition`] — resource is not `Frozen` or
-    ///   `Delisted` (e.g. still `Disputed`, already `Listed`, or `Tombstoned`)
+    ///   `Delisted` (e.g. still `Disputed`, already `Listed`, or `Tombstoned`),
+    ///   or it carries an active moderator dispute flag
     /// - [`Error::InvalidResourceId`] — `id` fails format validation
     /// - [`Error::NotFound`] — `id` is not a registered resource
     /// - [`Error::ContractPaused`] — the registry is paused
@@ -2142,6 +2150,13 @@ impl VaultRegistry {
             resource.state,
             ResourceState::Frozen | ResourceState::Delisted
         ) {
+            return Err(Error::InvalidLifecycleTransition);
+        }
+        // A flagged resource is mid-moderator-dispute: relisting it would be
+        // ambiguous, and the creator must not be able to clear a moderator's
+        // flag by reactivating. The flag has to be removed by a moderator
+        // (`unflag_resource`) before the creator exit reopens.
+        if resource.dispute_flag.is_flagged() {
             return Err(Error::InvalidLifecycleTransition);
         }
         Self::transition_state(&env, &mut resource, ResourceState::Listed);
