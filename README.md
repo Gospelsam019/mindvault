@@ -258,3 +258,6 @@ MIT
 
 <!-- handsoff-issue-3 -->
 - #3: [MCP] [Bug] paymentCeiling applies to buy but not to register_onchain / metadata mutations
+
+<!-- handsoff-issue-6 -->
+- #6: [MCP] [Bug] toolTimeoutOverrides applies to publish but not to export_receipts on huge histories
