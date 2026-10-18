@@ -253,3 +253,8 @@ The `PAYMENT-REQUIRED` header contains the price, destination wallet, network, a
 ## License
 
 MIT
+
+## Handsoff notes
+
+<!-- handsoff-issue-3 -->
+- #3: [MCP] [Bug] paymentCeiling applies to buy but not to register_onchain / metadata mutations
