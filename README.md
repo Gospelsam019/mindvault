@@ -258,3 +258,6 @@ MIT
 
 <!-- handsoff-issue-124 -->
 - #124: [MCP] [Bug] Enforce outbound URL allowlists for metadata and content verification
+
+<!-- handsoff-issue-125 -->
+- #125: [MCP] [Feature] Add export format option for receipt history
