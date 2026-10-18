@@ -253,3 +253,8 @@ The `PAYMENT-REQUIRED` header contains the price, destination wallet, network, a
 ## License
 
 MIT
+
+## Handsoff notes
+
+<!-- handsoff-issue-19 -->
+- #19: [Contract] [Bug] Keep creator listed counts consistent across pause and lifecycle transitions
