@@ -253,3 +253,8 @@ The `PAYMENT-REQUIRED` header contains the price, destination wallet, network, a
 ## License
 
 MIT
+
+## Handsoff notes
+
+<!-- handsoff-issue-124 -->
+- #124: [MCP] [Bug] Enforce outbound URL allowlists for metadata and content verification
