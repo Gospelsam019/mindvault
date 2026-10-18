@@ -253,3 +253,8 @@ The `PAYMENT-REQUIRED` header contains the price, destination wallet, network, a
 ## License
 
 MIT
+
+## Handsoff notes
+
+<!-- handsoff-issue-25 -->
+- #25: [Contract] [Bug] Prevent expired pause deadlines from reactivating after timestamp rollback
