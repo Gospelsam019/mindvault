@@ -261,3 +261,24 @@ MIT
 
 <!-- handsoff-issue-20 -->
 - #20: [Contract] [Feature] Add bounded resource search by normalized tag prefix
+<!-- handsoff-issue-11 -->
+- #11: [Contract] [Bug] Make cursor pagination stable when resources are tombstoned
+
+<!-- handsoff-issue-13 -->
+- #13: [Contract] [Bug] Reject duplicate IDs within a single register_batch call
+
+<!-- handsoff-issue-14 -->
+- #14: [Contract] [Feature] Add batch metadata-pointer updates with per-item results
+<!-- handsoff-issue-7 -->
+- #7: [MCP] [Bug] state backup restore accepts a file that belongs to another network profile
+
+<!-- handsoff-issue-8 -->
+- #8: [Contract] [Feature] Add versioned resource migrations with explicit upgrade guards
+
+<!-- handsoff-issue-9 -->
+- #9: [Contract] [Bug] Prevent stale creator indexes after repeated ownership transfers
+<!-- handsoff-issue-15 -->
+- #15: [Contract] [Bug] Ensure metadata freeze cannot be bypassed through batch setters
+
+<!-- handsoff-issue-18 -->
+- #18: [Contract] [Feature] Add creator-scoped listing page with listed and lifecycle filters

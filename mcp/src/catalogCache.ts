@@ -14,6 +14,8 @@
  * anything left behind by an earlier run.
  */
 
+import { currentCatalogCacheScope } from "./catalogCacheScope.js";
+
 export interface CatalogSnapshot {
   resources: unknown[];
   savedAtMs: number;
@@ -96,7 +98,8 @@ export function resolveCatalogCacheConfig(
 }
 
 let config: CatalogCacheConfig = { ...DEFAULT_CATALOG_CACHE_CONFIG };
-let catalog: CatalogSnapshot | null = null;
+// Snapshots are keyed by cache scope (#85) so one context never serves another.
+let catalogs = new Map<string, CatalogSnapshot>();
 let previews: Record<string, PreviewSnapshot> = {};
 
 /** Apply a cache lifetime. Called once at startup from the environment. */
@@ -128,7 +131,7 @@ export function isStale(savedAtMs: number, nowMs: number = Date.now()): boolean 
 
 /** Record a successful catalog read. The raw resource array is snapshotted. */
 export function recordCatalogSnapshot(resources: unknown[]): void {
-  catalog = { resources, savedAtMs: Date.now() };
+  catalogs.set(currentCatalogCacheScope(), { resources, savedAtMs: Date.now() });
 }
 
 /**
@@ -139,9 +142,11 @@ export function recordCatalogSnapshot(resources: unknown[]): void {
  * released and a later call cannot resurrect it.
  */
 export function getCatalogSnapshot(nowMs: number = Date.now()): CatalogSnapshot | null {
+  const scope = currentCatalogCacheScope();
+  const catalog = catalogs.get(scope);
   if (!catalog) return null;
   if (isExpired(catalog.savedAtMs, nowMs)) {
-    catalog = null;
+    catalogs.delete(scope);
     return null;
   }
   return { savedAtMs: catalog.savedAtMs, resources: [...catalog.resources] };
@@ -149,7 +154,7 @@ export function getCatalogSnapshot(nowMs: number = Date.now()): CatalogSnapshot 
 
 /** Record a successful preview read for a resource id. */
 export function recordPreviewSnapshot(resourceId: string, meta: unknown): void {
-  previews[resourceId] = { meta, savedAtMs: Date.now() };
+  previews[`${currentCatalogCacheScope()}\u0000${resourceId}`] = { meta, savedAtMs: Date.now() };
 }
 
 /**
@@ -160,10 +165,11 @@ export function getPreviewSnapshot(
   resourceId: string,
   nowMs: number = Date.now(),
 ): PreviewSnapshot | null {
-  const snap = previews[resourceId];
+  const key = `${currentCatalogCacheScope()}\u0000${resourceId}`;
+  const snap = previews[key];
   if (!snap) return null;
   if (isExpired(snap.savedAtMs, nowMs)) {
-    delete previews[resourceId];
+    delete previews[key];
     return null;
   }
   return { meta: snap.meta, savedAtMs: snap.savedAtMs };
@@ -223,7 +229,7 @@ export function catalogCacheLabel(
  * next.
  */
 export function _clearCatalogCache(): void {
-  catalog = null;
+  catalogs = new Map();
   previews = {};
   config = { ...DEFAULT_CATALOG_CACHE_CONFIG };
 }

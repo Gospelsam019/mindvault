@@ -15,7 +15,7 @@ For structured JSON results (`structuredContent` + `outputSchema`) see
 For client installation and configuration see
 [mcp-client-configs.md](mcp-client-configs.md).
 
-**41 tools** as of last generation.
+**42 tools** as of last generation.
 
 > **Read-only mode:** when `MINDVAULT_READ_ONLY` is set, mutating tools
 > (`mindvault_buy`, `mindvault_setup_wallet`, `mindvault_use_profile`, …) are not
@@ -84,10 +84,11 @@ For client installation and configuration see
 
 ## Receipts
 
-| Tool                         | Description                                                                                                                                                                                                                                                                                              | Structured |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `mindvault_export_receipts`  | Export receipts for resources this agent has purchased as a schema-versioned document (JSON, or RFC 4180 CSV in the envelope's csv field). Filter by resource, network, and date range. Reports a row count and the summed USDC total, so an agent can reconcile spend without re-reading each purchase. | yes        |
-| `mindvault_purchase_history` | List locally persisted purchase receipts from successful mindvault_buy calls (~/.mindvault/purchases.json). Read-only. Optional filters: resourceId and network (exact match, e.g. stellar:testnet). Returns count + purchases (newest first), or an empty list when nothing matches.                    | yes        |
+| Tool                         | Description                                                                                                                                                                                                                                                                                                                                                   | Structured |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `mindvault_export_receipts`  | Export receipts for resources this agent has purchased as a schema-versioned document (JSON, or RFC 4180 CSV in the envelope's csv field). Filter by resource, network, and date range. Reports a row count and the summed USDC total, so an agent can reconcile spend without re-reading each purchase.                                                      | yes        |
+| `mindvault_purchase_history` | List locally persisted purchase receipts from successful mindvault_buy calls (~/.mindvault/purchases.json). Read-only. Optional filters: resourceId and network (exact match, e.g. stellar:testnet). Returns count + purchases (newest first), or an empty list when nothing matches.                                                                         | yes        |
+| `mindvault_purchase_status`  | Resolve a mindvault_buy attempt by its client idempotencyKey when the tool response never reached you. Read-only and scoped to the active wallet profile: another profile's key reads as unknown. Returns state unknown (no attempt recorded), pending (started, outcome not recorded), settled (with txHash and receiptRef) or failed (no payment was made). | yes        |
 
 ## State Management
 
@@ -118,4 +119,4 @@ For client installation and configuration see
 
 ---
 
-_This file was generated from `mcp/src/tools.ts` — 41 tools._
+_This file was generated from `mcp/src/tools.ts` — 42 tools._

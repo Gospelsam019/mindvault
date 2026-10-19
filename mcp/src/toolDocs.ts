@@ -38,7 +38,11 @@ export function groupOf(name: string): string {
   if (["mindvault_setup_wallet", "mindvault_wallet_info", "mindvault_import_wallet"].includes(name))
     return "Wallet";
   if (["mindvault_use_profile", "mindvault_list_profiles"].includes(name)) return "Profiles";
-  if (["mindvault_browse", "mindvault_search", "mindvault_preview"].includes(name))
+  if (
+    ["mindvault_browse", "mindvault_search", "mindvault_preview", "mindvault_compare_catalogs"].includes(
+      name,
+    )
+  )
     return "Catalog";
   if (
     [
@@ -74,7 +78,12 @@ export function groupOf(name: string): string {
     ].includes(name)
   )
     return "Registry & Diagnostics";
-  if (["mindvault_purchase_history", "mindvault_export_receipts"].includes(name)) return "Receipts";
+  if (
+    ["mindvault_purchase_history", "mindvault_purchase_status", "mindvault_export_receipts"].includes(
+      name,
+    )
+  )
+    return "Receipts";
   if (
     [
       "mindvault_backup_state",
@@ -92,6 +101,7 @@ export function groupOf(name: string): string {
       "mindvault_rotate_publisher_key",
       "mindvault_verify_install",
       "mindvault_debug_bundle",
+      "mindvault_support_bundle",
     ].includes(name)
   )
     return "Operations";

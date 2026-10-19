@@ -78,6 +78,7 @@ const VALID_CALLS: Record<string, Record<string, unknown>> = {
   mindvault_registry_lookup: { resourceId: "res-001" },
   mindvault_registry_list: {},
   mindvault_registry_count: {},
+  mindvault_compare_catalogs: { left: "testnet", right: "mainnet" },
   mindvault_registry_count: {},
   mindvault_tx_status: { txHash: VALID_SHA256 },
   mindvault_reset: {},

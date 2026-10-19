@@ -5,7 +5,7 @@
 
 This file is a generated, human-readable summary of the MCP tool surface (ListTools). It is scoped to the `mcp/` package and intended as a quick reference for integrators and reviewers.
 
-Generated from `mcp/src/tools.ts` (40 tools).
+Generated from `mcp/src/tools.ts` (41 tools).
 
 ## Tools
 
@@ -65,6 +65,7 @@ Generated from `mcp/src/tools.ts` (40 tools).
 - `mindvault_recover_catalog_cache`: Attempt a catalog stale-cache recovery: requests the MCP to refresh or re-fetch catalog index data and provides recovery guidance. Useful when browse results appear stale.
 - `mindvault_publish_status`: Poll a published resource's verification and on-chain sync status. Returns verificationStatus (pending, verified, rejected, skipped), listed, onchainStatus, onchainTxHash, and optional verification details. Pass wait: true to poll until verification settles or timeoutMs elapses. Deterministic errors for missing resourceId and 404s.
 - `mindvault_purchase_history`: List locally persisted purchase receipts from successful mindvault_buy calls (~/.mindvault/purchases.json). Read-only. Filter by resourceId and network (exact match), or search resource ids and titles with a case-insensitive query. Filters can be combined. Returns newest first. Each receipt includes a pre-resolved explorerUrl for the settlement transaction (null when no txHash was recorded) — no external join is needed. To check live on-chain settlement status, pass the receipt's txHash to mindvault_tx_status.
+- `mindvault_purchase_status`: Resolve a mindvault_buy attempt by its client idempotencyKey when the tool response never reached you. Read-only and scoped to the active wallet profile: another profile's key reads as unknown. Returns state unknown (no attempt recorded), pending (started, outcome not recorded), settled (with txHash and receiptRef) or failed (no payment was made).
 - `mindvault_publish_batch`: Publish up to 10 link resources in a single batch. Each resource is created and verified via x402 payment individually (the agent wallet pays the verification fee per item), then all verified resources are registered on-chain in one `register_batch` Soroban transaction — a single wallet approval covers the entire batch. Returns a summary with per-item verification status, on-chain status, and the batch transaction hash.
 
 ## Notes

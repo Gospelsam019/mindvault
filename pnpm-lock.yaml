@@ -86,6 +86,9 @@ importers:
       '@x402/stellar':
         specifier: ^2.9.0
         version: 2.16.0
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
       node-fetch:
         specifier: ^3.3.2
         version: 3.3.2
