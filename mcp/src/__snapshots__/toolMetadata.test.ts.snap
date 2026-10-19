@@ -11,6 +11,7 @@ exports[`MCP tool metadata > exposes the expected tool surface 1`] = `
   "mindvault_browse",
   "mindvault_search",
   "mindvault_preview",
+  "mindvault_compare_catalogs",
   "mindvault_register",
   "mindvault_publish",
   "mindvault_buy",
@@ -53,9 +54,11 @@ exports[`MCP tool metadata > exposes the expected tool surface 1`] = `
   "mindvault_rotate_publisher_key",
   "mindvault_verify_install",
   "mindvault_debug_bundle",
+  "mindvault_support_bundle",
   "mindvault_recover_catalog_cache",
   "mindvault_publish_status",
   "mindvault_purchase_history",
+  "mindvault_purchase_status",
   "mindvault_publish_batch",
 ]
 `;

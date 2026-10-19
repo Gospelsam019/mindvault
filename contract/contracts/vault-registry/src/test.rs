@@ -4717,6 +4717,11 @@ fn full_workflow_emits_exactly_the_documented_events() {
         .set_sequence_number(env.ledger().sequence() + ADMIN_NOMINATION_MIN_GAP);
     client.accept_admin(&admin2);
     record(&env, &client, &mut observed);
+    let admin3 = Address::generate(&env);
+    client.nominate_new_admin(&admin3); // -> "nomadmin"
+    record(&env, &client, &mut observed);
+    client.cancel_admin_nomination(); // -> "nomcancel"
+    record(&env, &client, &mut observed);
 
     // Verifier role, verification mirror, freeze, and index repair.
     let old_verifier = Address::generate(&env);
@@ -4864,6 +4869,11 @@ fn full_workflow_emits_exactly_the_documented_events() {
     client.set_paused_until(&admin2, &200); // -> "pause", "pause_until"
     record(&env, &client, &mut observed);
     client.set_paused(&admin2, &false);
+    record(&env, &client, &mut observed);
+
+    client.set_payments_paused(&admin2, &true); // -> "paypause"
+    record(&env, &client, &mut observed);
+    client.set_payments_paused(&admin2, &false); // -> "paypause"
     record(&env, &client, &mut observed);
 
     // Network bootstrap and the creator reactivation path round out the
@@ -8753,6 +8763,81 @@ fn pause_allows_read_only_methods() {
     let _ = client.get_terms_hash(&creator);
 }
 
+// ── Payment-scope pause tests (#62) ──────────────────────────────────────────
+
+#[test]
+fn payments_paused_blocks_record_payment() {
+    let (env, creator, admin, settler, client) = setup_with_settler();
+    let id = register_default(&env, &creator, &client, "ppayrec");
+    let payer = Address::generate(&env);
+    client.set_payments_paused(&admin, &true);
+    assert!(client.is_payments_paused());
+    let res = client.try_record_payment(
+        &settler,
+        &String::from_str(&env, "rcptpp"),
+        &id,
+        &payer,
+        &1_000_000i128,
+        &String::from_str(&env, "txhashpp"),
+    );
+    assert_eq!(res, Err(Ok(Error::ContractPaused)));
+}
+
+#[test]
+fn payments_paused_allows_catalog_writes() {
+    let (env, creator, admin, client) = setup_with_admin();
+    client.set_payments_paused(&admin, &true);
+    let res = client.try_register(
+        &creator,
+        &String::from_str(&env, "ppregok"),
+        &100i128,
+        &String::from_str(&env, "ipfs://m"),
+        &empty_tags(&env),
+    );
+    assert_eq!(res, Ok(Ok(())));
+    assert_eq!(client.count(), 1);
+}
+
+#[test]
+fn payments_paused_unpause_restores() {
+    let (env, creator, admin, settler, client) = setup_with_settler();
+    let id = register_default(&env, &creator, &client, "ppun");
+    let payer = Address::generate(&env);
+    client.set_payments_paused(&admin, &true);
+    client.set_payments_paused(&admin, &false);
+    let res = client.try_record_payment(
+        &settler,
+        &String::from_str(&env, "rcptppu"),
+        &id,
+        &payer,
+        &1_000_000i128,
+        &String::from_str(&env, "txhashppu"),
+    );
+    assert_eq!(res, Ok(Ok(())));
+}
+
+#[test]
+fn payments_paused_requires_admin() {
+    let (env, _creator, admin, client) = setup_with_admin();
+    let other = Address::generate(&env);
+    let res = client.try_set_payments_paused(&other, &true);
+    assert_eq!(res, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn payments_paused_admin_not_set() {
+    let (env, _creator, client) = setup();
+    let admin = Address::generate(&env);
+    let res = client.try_set_payments_paused(&admin, &true);
+    assert_eq!(res, Err(Ok(Error::AdminNotSet)));
+}
+
+#[test]
+fn payments_paused_is_payments_paused_default_false() {
+    let (_env, _creator, admin, client) = setup_with_admin();
+    assert!(!client.is_payments_paused());
+}
+
 // ── Unpause restores write access ────────────────────────────────────────────
 
 #[test]
@@ -11260,17 +11345,28 @@ fn differently_cased_tags_indexed_under_same_normalized_tag() {
     assert_eq!(results.len(), 2);
 }
 
+include!("test/batch_state_reads.rs");
+include!("test/role_inventory.rs");
+include!("test/admin_nomination_cancel.rs");
+include!("test/recovery_target_check.rs");
 include!("test/lifecycle_events.rs");
 include!("test/storage_footprint.rs");
+include!("test/fee_split_preview.rs");
 
 include!("test/auth_fixtures.rs");
 include!("test/tombstone_read.rs");
 include!("test/creator_listed_count.rs");
 include!("test/memo_hash.rs");
+include!("test/role_events.rs");
+include!("test/capability_version.rs");
+include!("test/anchor_status.rs");
 include!("test/flag_details.rs");
 include!("test/payment_idempotency.rs");
+include!("test/partial_refunds.rs");
 include!("test/stellar_wave_804_805_806_808.rs");
 include!("test/leases.rs");
+include!("test/lease_fee_protection.rs");
 include!("test/cursor_paging.rs");
 include!("test/payment_listing.rs");
 include!("test/anchor_backoff.rs");
+include!("test/fee_rounding_proptest.rs");

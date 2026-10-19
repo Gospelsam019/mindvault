@@ -21,6 +21,7 @@ import {
   WALLET_SETUP_OUTPUT_SCHEMA,
 } from "./outputSchemas.js";
 import { TOOL_DEFINITIONS } from "./tools.js";
+import { outputValidationErrors } from "./toolResult.js";
 
 function requiredKeys(schema: { required?: readonly string[] }): readonly string[] {
   return schema.required ?? [];
@@ -50,6 +51,15 @@ describe("structured tools advertise a schema", () => {
     expect(structured.length).toBeGreaterThan(10);
     for (const tool of structured) {
       expect(tool.outputSchema, `${tool.name} should advertise outputSchema`).toBeDefined();
+    }
+  });
+
+  it("all advertised output schemas are compilable by the runtime validator", () => {
+    for (const tool of TOOL_DEFINITIONS) {
+      if (!tool.outputSchema) continue;
+      expect(outputValidationErrors(tool.outputSchema, {}), `${tool.name} schema`).not.toContain(
+        "schema compilation failed",
+      );
     }
   });
 
