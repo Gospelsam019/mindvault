@@ -30,6 +30,11 @@ export interface PurchaseAttempt {
   state: PurchaseAttemptState;
   startedAt: string;
   updatedAt: string;
+
+/** Pending attempts for one profile, used by the read-only spend estimate. */
+export function listPendingPurchaseAttempts(profile: string): PurchaseAttempt[] {
+  return load().attempts.filter((attempt) => attempt.profile === profile && attempt.state === "pending");
+}
   txHash: string | null;
   receiptRef: string | null;
   error: string | null;

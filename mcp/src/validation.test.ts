@@ -317,6 +317,20 @@ describe("string arguments", () => {
     expect(err.issues[0].field).toBe("walletAddress");
   });
 
+  it("rejects a Stellar-shaped address with an invalid checksum before dispatch", () => {
+    const invalidAddress = `G${"A".repeat(55)}`;
+    const err = expectInvalid("mindvault_register", {
+      name: "A",
+      email: "a@b.co",
+      walletAddress: invalidAddress,
+    });
+    expect(err.issues[0]).toMatchObject({
+      field: "walletAddress",
+      code: "pattern_mismatch",
+      message: "walletAddress is not a valid Stellar public address.",
+    });
+  });
+
   it("rejects a non-http externalUrl", () => {
     const err = expectInvalid("mindvault_publish", {
       title: "T",

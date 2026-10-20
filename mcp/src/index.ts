@@ -145,8 +145,14 @@ import { correlationHeaders } from "./correlation.js";
 import {
   assertAutoPaymentWithinCeiling,
   assertTransactionFeeWithinCeiling,
+  DEFAULT_MAX_AUTO_PAY_USDC,
   recomputePaymentCeilingAfterPriceChange,
 } from "./paymentCeiling.js";
+import {
+  listPendingPurchaseAttempts,
+  lookupPurchaseStatus,
+  trackPurchaseAttempt,
+} from "./purchaseStatusLookup.js";
 import {
   compareUsdc,
   normalizeUsdcBalance,
@@ -368,6 +374,11 @@ const STATE_FILE = join(STATE_DIR, "state.json");
 
 let profiles: Record<string, WalletProfile> = {};
 let activeProfileName: string = DEFAULT_PROFILE;
+const pendingWalletImportApprovals = new Map<
+  string,
+  { address: string; network: "testnet" | "mainnet"; expiresAt: number }
+>();
+const WALLET_IMPORT_APPROVAL_TTL_MS = 5 * 60 * 1000;
 
 function activeProfile(): WalletProfile {
   return (profiles[activeProfileName] ??= {});
@@ -709,9 +720,12 @@ async function importWallet(args: {
   secretKey?: string;
   profile?: string;
   persist?: boolean;
+  network?: "testnet" | "mainnet";
+  confirmAddress?: string;
 }): Promise<ToolOutcome> {
   const target = resolveProfileName(args.profile);
-  const persist = args.persist !== false;
+  const persist = args.persist === true;
+  const selectedNetwork = args.network ?? profiles[target]?.network ?? STELLAR_NETWORK;
 
   let secretKey = args.secretKey;
   if (!secretKey) {
@@ -732,33 +746,74 @@ async function importWallet(args: {
     const { Keypair } = await import("@stellar/stellar-sdk");
     const keypair = Keypair.fromSecret(secretKey);
     publicKey = keypair.publicKey();
-  } catch (err) {
-    throw new Error(`Failed to derive public key: ${safeErrorMessage(err)}`);
+  } catch {
+    throw new Error("Invalid Stellar secret key; unable to derive a public address.");
   }
 
   if (persist) {
+    if (!args.profile || !args.network) {
+      throw new Error(
+        "Wallet not persisted. Confirm the preview by passing the exact profile, network, and confirmAddress.",
+      );
+    }
+    if (selectedNetwork !== STELLAR_NETWORK) {
+      throw new Error(
+        `Wallet not persisted. The selected network (${selectedNetwork}) does not match the configured Stellar network (${STELLAR_NETWORK}).`,
+      );
+    }
+    const profileNetwork = profiles[target]?.network;
+    if (profileNetwork && profileNetwork !== selectedNetwork) {
+      throw new Error(
+        `Wallet not persisted. Profile "${target}" is already bound to ${profileNetwork}.`,
+      );
+    }
+    if (args.confirmAddress !== publicKey) {
+      throw new Error("Wallet not persisted. confirmAddress must exactly match the derived address.");
+    }
+    const approval = pendingWalletImportApprovals.get(target);
+    if (
+      !approval ||
+      approval.expiresAt <= Date.now() ||
+      approval.address !== publicKey ||
+      approval.network !== selectedNetwork
+    ) {
+      pendingWalletImportApprovals.delete(target);
+      throw new Error(
+        "Wallet not persisted. Verify the address first, then confirm it within five minutes.",
+      );
+    }
     activeProfileName = target;
     activeProfile().wallet = { publicKey, secretKey };
-    bindActiveProfileToNetwork();
+    activeProfile().network = selectedNetwork;
     saveState();
+    pendingWalletImportApprovals.delete(target);
     return {
       text: [
         `Wallet imported.`,
         `Profile: ${target}`,
+        `Network: ${selectedNetwork}`,
         `Address: ${publicKey}`,
         `Wallet persisted to ${STATE_FILE} (mode 0600).`,
       ].join("\n"),
-      structured: { profile: target, address: publicKey, persisted: true },
+      structured: { profile: target, address: publicKey, network: selectedNetwork, persisted: true },
     };
   }
 
+  pendingWalletImportApprovals.set(target, {
+    address: publicKey,
+    network: selectedNetwork,
+    expiresAt: Date.now() + WALLET_IMPORT_APPROVAL_TTL_MS,
+  });
+
   return {
     text: [
-      `Wallet validated (not persisted).`,
+      `Wallet verified (not persisted).`,
+      `Profile: ${target}`,
+      `Network: ${selectedNetwork}`,
       `Address: ${publicKey}`,
-      `Pass persist: true to save to the state file.`,
+      `To persist, call again with persist: true, profile: "${target}", network: "${selectedNetwork}", and confirmAddress: "${publicKey}".`,
     ].join("\n"),
-    structured: { profile: target, address: publicKey, persisted: false },
+    structured: { profile: target, address: publicKey, network: selectedNetwork, persisted: false },
   };
 }
 
@@ -1541,6 +1596,7 @@ function balanceRowStructured(row: WalletBalanceRow): Record<string, unknown> {
   return {
     profile: row.profile ?? null,
     address: row.address,
+    network: STELLAR_NETWORK,
     active: row.active ?? null,
     publisherRegistered: row.publisherRegistered ?? null,
     xlmBalance: row.details?.xlmBalance ?? null,
@@ -1549,6 +1605,52 @@ function balanceRowStructured(row: WalletBalanceRow): Record<string, unknown> {
     usdcBalance: row.details?.usdcBalance ?? null,
     usdcStatus: row.details?.status ?? null,
     note: row.note,
+  };
+}
+
+const MAX_PENDING_SPEND_PRICE_LOOKUPS = 25;
+
+async function estimatePendingSpend(profile: string): Promise<{
+  amountUsdc: string | null;
+  attemptCount: number;
+  pricedAttemptCount: number;
+}> {
+  const attempts = listPendingPurchaseAttempts(profile);
+  if (attempts.length === 0) {
+    return { amountUsdc: "0", attemptCount: 0, pricedAttemptCount: 0 };
+  }
+
+  const considered = attempts.slice(0, MAX_PENDING_SPEND_PRICE_LOOKUPS);
+  const resourceIds = [...new Set(considered.map((attempt) => attempt.resourceId))];
+  const prices = new Map<string, bigint | null>();
+  await Promise.all(
+    resourceIds.map(async (resourceId) => {
+      try {
+        const response = await jsonFetch(
+          `${BASE_URL}/resources/${encodeURIComponent(resourceId)}/meta`,
+        );
+        const price = response.ok ? response.data?.price : null;
+        prices.set(resourceId, typeof price === "string" ? toStroops(price) : null);
+      } catch {
+        prices.set(resourceId, null);
+      }
+    }),
+  );
+
+  let totalStroops = 0n;
+  let pricedAttemptCount = 0;
+  for (const attempt of considered) {
+    const price = prices.get(attempt.resourceId);
+    if (price === null || price === undefined) continue;
+    totalStroops += price;
+    pricedAttemptCount += 1;
+  }
+
+  const complete = attempts.length === considered.length && pricedAttemptCount === attempts.length;
+  return {
+    amountUsdc: complete ? stroopsToUsdc(totalStroops) : null,
+    attemptCount: attempts.length,
+    pricedAttemptCount,
   };
 }
 
@@ -1576,6 +1678,10 @@ async function walletBalancesOutcome(): Promise<ToolOutcome> {
 
   const platformAddress = PLATFORM_WALLET_ADDRESS?.trim() || null;
   const platform = platformAddress ? await loadBalanceRow({ address: platformAddress }) : null;
+  const spendEstimate = await estimatePendingSpend(activeProfileName);
+  const activeWallet = agents.find((row) => row.profile === activeProfileName);
+  const configuredAutoPayCeilingUsdc =
+    process.env.MINDVAULT_MAX_AUTO_PAY_USDC ?? DEFAULT_MAX_AUTO_PAY_USDC;
 
   const usdcTotal = sumBalances(
     [...agents, ...(platform ? [platform] : [])]
@@ -1619,6 +1725,14 @@ async function walletBalancesOutcome(): Promise<ToolOutcome> {
   }
   lines.push(`Totals (unique wallets): USDC ${usdcTotal} · XLM ${xlmTotal}`);
   lines.push(
+    `Spend summary (${activeProfileName}, ${STELLAR_NETWORK}, USDC): balance ${activeWallet?.details?.usdcBalance ?? "unavailable"}; estimated pending spend ${spendEstimate.amountUsdc ?? "unavailable"}; automatic payment ceiling ${configuredAutoPayCeilingUsdc}.`,
+  );
+  if (spendEstimate.attemptCount > 0) {
+    lines.push(
+      `Pending spend is an estimate from current listing prices (${spendEstimate.pricedAttemptCount}/${spendEstimate.attemptCount} purchase attempts priced); an incomplete estimate is unavailable rather than understated.`,
+    );
+  }
+  lines.push(
     "Publisher payout target on the server is PAY_TO; this list mirrors the agent wallets and PLATFORM_WALLET_ADDRESS.",
   );
 
@@ -1635,7 +1749,18 @@ async function walletBalancesOutcome(): Promise<ToolOutcome> {
         : null,
       agents: agents.map((row) => balanceRowStructured(row)),
       count: agents.length,
-      statistics: { totalUsdc: usdcTotal, totalXlm: xlmTotal },
+      statistics: { network: STELLAR_NETWORK, totalUsdc: usdcTotal, totalXlm: xlmTotal },
+      spendSummary: {
+        profile: activeProfileName,
+        network: STELLAR_NETWORK,
+        asset: "USDC",
+        currentBalanceUsdc: activeWallet?.details?.usdcBalance ?? null,
+        estimatedPendingSpendUsdc: spendEstimate.amountUsdc,
+        pendingPurchaseCount: spendEstimate.attemptCount,
+        pricedPendingPurchaseCount: spendEstimate.pricedAttemptCount,
+        configuredAutoPayCeilingUsdc,
+        estimateBasis: "current public resource prices for pending idempotent purchase attempts",
+      },
       message:
         agents.length > 0
           ? `Listed ${agents.length} agent wallet(s).`
@@ -4232,6 +4357,8 @@ async function dispatchToolOutcome(
           secretKey: optionalString(args, "secretKey"),
           profile: optionalString(args, "profile"),
           persist: flag(args, "persist"),
+          network: optionalString(args, "network") as "testnet" | "mainnet" | undefined,
+          confirmAddress: optionalString(args, "confirmAddress"),
         });
       case "mindvault_rotate_publisher_key":
         return rotatePublisherKey(optionalString(args, "profile"));
