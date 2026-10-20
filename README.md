@@ -256,6 +256,11 @@ MIT
 
 ## Handsoff notes
 
+<!-- handsoff-issue-19 -->
+- #19: [Contract] [Bug] Keep creator listed counts consistent across pause and lifecycle transitions
+
+<!-- handsoff-issue-20 -->
+- #20: [Contract] [Feature] Add bounded resource search by normalized tag prefix
 <!-- handsoff-issue-11 -->
 - #11: [Contract] [Bug] Make cursor pagination stable when resources are tombstoned
 
