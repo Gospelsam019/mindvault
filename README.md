@@ -256,6 +256,8 @@ MIT
 
 ## Handsoff notes
 
+<!-- handsoff-issue-25 -->
+- #25: [Contract] [Bug] Prevent expired pause deadlines from reactivating after timestamp rollback
 <!-- handsoff-issue-3 -->
 - #3: [MCP] [Bug] paymentCeiling applies to buy but not to register_onchain / metadata mutations
 
