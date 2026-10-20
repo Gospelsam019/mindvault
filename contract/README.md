@@ -1,4 +1,4 @@
-# MindVault Contracts (Soroban)
+﻿# MindVault Contracts (Soroban)
 
 Soroban smart contracts for MindVault. Today there is one:
 
