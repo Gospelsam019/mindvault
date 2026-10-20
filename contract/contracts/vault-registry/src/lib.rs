@@ -1,4 +1,4 @@
-#![no_std]
+﻿#![no_std]
 //! MindVault on-chain vault registry.
 //!
 //! Records each vault resource on Stellar: its creator, price (in USDC base
@@ -77,6 +77,8 @@ pub const FIELD_MASK_LIFECYCLE: u32 = 1 << 9;
 /// `set_flag_reason_hash`. Same bound as `MAX_TERMS_HASH_LEN` — both store a
 /// fixed-size digest of arbitrary off-chain content.
 pub const MAX_FLAG_REASON_HASH_LEN: u32 = 64;
+/// Maximum length of an optional dispute reason hash attached to refunds (MAX_REFUND_REASON_HASH_LEN).
+pub const MAX_REFUND_REASON_HASH_LEN: u32 = 64;
 const MAX_TAGS: u32 = 8;
 /// Decimal places in Stellar USDC, so 1 USDC is `10^7` base units. A USDC base
 /// unit is *not* a "stroop" (a stroop is `10^-5` XLM — a 100x difference).
@@ -495,7 +497,7 @@ pub const EVENT_SCHEMA: &[(&str, &str)] = &[
     ("refwin", "(old_window_ledgers: u32, new_window_ledgers: u32)"),
     (
         "refund",
-        "RefundReceipt { refund_id, payment_receipt_id, resource_id, recipient, amount, tx_hash, initiated_by, recorded_at, admin_override, remaining_balance }",
+        "RefundReceipt { refund_id, payment_receipt_id, resource_id, recipient, amount, tx_hash, initiated_by, recorded_at, admin_override, remaining_balance, reason_hash }",
     ),
     ("addmod", "RoleChange { admin, target, granted: true }"),
     ("rmmod", "RoleChange { admin, target, granted: false }"),
@@ -1170,6 +1172,7 @@ pub struct RefundReceipt {
     pub recorded_at: u32,
     pub admin_override: bool,
     pub remaining_balance: i128,
+    pub reason_hash: Option<String>,
 }
 
 /// Immutable on-chain anchor for a purchase receipt hash.
@@ -5338,6 +5341,7 @@ impl VaultRegistry {
         amount: i128,
         tx_hash: String,
         admin_override: bool,
+        reason_hash: Option<String>,
     ) -> Result<(), Error> {
         Self::require_not_paused(env)?;
         Self::require_not_payments_paused(env)?;
@@ -5345,6 +5349,16 @@ impl VaultRegistry {
         Self::validate_receipt_id(&payment_receipt_id)?;
         Self::validate_payment_amount(amount)?;
         Self::validate_tx_hash(&tx_hash)?;
+
+        if let Some(ref hash) = reason_hash {
+            Self::validate_bounded_string(
+                hash,
+                1,
+                MAX_REFUND_REASON_HASH_LEN,
+                Error::RefundReasonHashTooLong,
+                Error::RefundReasonHashTooLong,
+            )?;
+        }
 
         let refund_key = DataKey::RefundReceipt(refund_id.clone());
         if let Some(existing) = env
@@ -5358,6 +5372,7 @@ impl VaultRegistry {
                 && existing.tx_hash == tx_hash
                 && existing.initiated_by == initiator
                 && existing.admin_override == admin_override
+                && existing.reason_hash == reason_hash
             {
                 return Ok(());
             }
@@ -5432,6 +5447,7 @@ impl VaultRegistry {
             recorded_at: env.ledger().sequence(),
             admin_override,
             remaining_balance,
+            reason_hash,
         };
         env.storage().persistent().set(&refund_key, &refund);
         Self::bump_persistent(env, &refund_key);

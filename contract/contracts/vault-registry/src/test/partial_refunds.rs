@@ -1,4 +1,4 @@
-// ── Partial refund accounting and remaining balance tests (#36) ─────────────
+﻿// ── Partial refund accounting and remaining balance tests (#36) ─────────────
 //
 // Verifies:
 // 1. Multiple partial refunds against a single payment receipt accumulate correctly.
@@ -288,4 +288,70 @@ fn partial_refund_window_and_admin_override() {
         ),
         Err(Ok(Error::PaymentAmountMismatch))
     );
+}
+
+
+#[test]
+fn creator_refund_with_optional_reason_hash() {
+    let (env, creator, _admin, settler, client) = setup_with_settler();
+    let id = register_default(&env, &creator, &client, "pref_rsn01");
+    let payer = Address::generate(&env);
+    let payment_id = String::from_str(&env, "pay_pref_rsn01");
+    let total_payment = 500_000i128;
+
+    client.record_payment(
+        &settler,
+        &payment_id,
+        &id,
+        &payer,
+        &total_payment,
+        &String::from_str(&env, "tx_pay_rsn01"),
+    );
+    client.settle_payment(&settler, &payment_id);
+
+    // 1. Successful refund with reason hash
+    let ref1_id = String::from_str(&env, "ref_rsn_a");
+    let reason_hash = String::from_str(&env, "sha256_audit_dispute_reason_hash_example");
+    client.record_creator_refund_with_reason(
+        &creator,
+        &ref1_id,
+        &payment_id,
+        &payer,
+        &200_000i128,
+        &String::from_str(&env, "tx_ref_rsn_a"),
+        &Some(reason_hash.clone()),
+    );
+
+    let ref1 = client.get_refund(&ref1_id);
+    assert_eq!(ref1.reason_hash, Some(reason_hash.clone()));
+    assert_eq!(client.get_refund_reason_hash(&ref1_id), Some(reason_hash));
+
+    // 2. Refund with None reason hash
+    let ref2_id = String::from_str(&env, "ref_rsn_b");
+    client.record_creator_refund_with_reason(
+        &creator,
+        &ref2_id,
+        &payment_id,
+        &payer,
+        &100_000i128,
+        &String::from_str(&env, "tx_ref_rsn_b"),
+        &None,
+    );
+    let ref2 = client.get_refund(&ref2_id);
+    assert_eq!(ref2.reason_hash, None);
+    assert_eq!(client.get_refund_reason_hash(&ref2_id), None);
+
+    // 3. Reason hash exceeding MAX_REFUND_REASON_HASH_LEN (64 bytes) is rejected
+    let too_long_hash = String::from_str(&env, "12345678901234567890123456789012345678901234567890123456789012345"); // 65 chars
+    let ref3_id = String::from_str(&env, "ref_rsn_c");
+    let res = client.try_record_creator_refund_with_reason(
+        &creator,
+        &ref3_id,
+        &payment_id,
+        &payer,
+        &50_000i128,
+        &String::from_str(&env, "tx_ref_rsn_c"),
+        &Some(too_long_hash),
+    );
+    assert_eq!(res, Err(Ok(Error::RefundReasonHashTooLong)));
 }
