@@ -17,6 +17,8 @@
  * is unit-testable without real waiting.
  */
 
+import { currentToolSignal } from "./toolCancellation.js";
+
 // ── User-Agent ────────────────────────────────────────────────────────────────
 
 /**
@@ -140,7 +142,7 @@ export async function fetchWithTimeout(
   if (isTimeoutDisabled(timeoutMs)) return fetchImpl(input, init);
 
   const controller = new AbortController();
-  const callerSignal = init?.signal ?? undefined;
+  const callerSignal = init?.signal ?? currentToolSignal() ?? undefined;
 
   let timedOut = false;
   const timer = setTimeout(() => {

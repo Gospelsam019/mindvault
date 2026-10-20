@@ -1463,9 +1463,11 @@ describe("registerOnchain – happy path", () => {
   beforeEach(() => {
     _setAgentWallet(testWallet);
     _setAgentApiKey("test-api-key");
+    _setMockMode(true);
   });
 
   afterEach(() => {
+    _setMockMode(false);
     _setAgentWallet(null);
     _setAgentApiKey(null);
     vi.restoreAllMocks();
@@ -1528,9 +1530,11 @@ describe("registerOnchain – error and retry messaging", () => {
   beforeEach(() => {
     _setAgentWallet(testWallet);
     _setAgentApiKey("test-api-key");
+    _setMockMode(true);
   });
 
   afterEach(() => {
+    _setMockMode(false);
     _setAgentWallet(null);
     _setAgentApiKey(null);
     vi.restoreAllMocks();

@@ -15,11 +15,20 @@
  */
 
 import { catalogFilterInputProperties } from "./catalogFilters.js";
+import { bypassCacheInputProperty } from "./catalogCacheBypass.js";
+import { CATALOG_CURSOR_INPUT_PROPERTY } from "./catalogCursor.js";
+import {
+  COMPARE_CATALOGS_OUTPUT_SCHEMA,
+  COMPARE_DEFAULT_LIMIT,
+  COMPARE_MAX_LIMIT,
+  COMPARE_NETWORKS,
+} from "./catalogCompare.js";
 import {
   AGENT_STATUS_OUTPUT_SCHEMA,
   ATTESTATION_VERIFICATION_OUTPUT_SCHEMA,
   BATCH_CATALOG_LOOKUP_OUTPUT_SCHEMA,
   CATALOG_LIST_OUTPUT_SCHEMA,
+  CONTRACT_PREFLIGHT_OUTPUT_SCHEMA,
   CONSISTENCY_OUTPUT_SCHEMA,
   FEE_CONFIG_OUTPUT_SCHEMA,
   LIST_PROFILES_OUTPUT_SCHEMA,
@@ -50,6 +59,7 @@ import {
   WALLET_INFO_OUTPUT_SCHEMA,
   WALLET_SETUP_OUTPUT_SCHEMA,
 } from "./outputSchemas.js";
+import { PURCHASE_STATUS_OUTPUT_SCHEMA } from "./purchaseStatusLookup.js";
 import { RECEIPT_EXPORT_MAX_LIMIT, RECEIPT_EXPORT_OUTPUT_SCHEMA } from "./receipts.js";
 import {
   DEBUG_BUNDLE_DEFAULT_AUDIT_LINES,
@@ -87,7 +97,7 @@ export interface ToolAnnotations {
   title: string;
   /** The tool performs no state changes or side effects. */
   readOnlyHint: boolean;
-  /** The tool can irreversibly destroy local state. */
+  /** The tool may perform destructive updates. */
   destructiveHint: boolean;
   /** Repeating the tool with identical arguments is safe and yields the same result. */
   idempotentHint: boolean;
@@ -247,13 +257,17 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "List resources in the MindVault catalog with the same optional filters as mindvault_search and GET /resources: keyword, price range, verification status, resource type, owner, sort, pagination, tags, and listed state. Sort accepts newest, price_asc, price_desc, or title; results are ordered client-side too, so the order holds even when the backend ignores the parameter.",
     inputSchema: {
       type: "object",
-      properties: { ...catalogFilterInputProperties },
+      properties: { ...catalogFilterInputProperties, ...bypassCacheInputProperty },
+      properties: {
+        ...catalogFilterInputProperties,
+        cursor: CATALOG_CURSOR_INPUT_PROPERTY,
+      },
       required: [],
     },
     outputSchema: CATALOG_LIST_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
     annotations: {
       title: "Browse Catalog",
-      readOnlyHint: true,
+      readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
     },
@@ -264,13 +278,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "Search the MindVault catalog by keyword and optional filters for price, resource type, verification status, owner, sort, pagination, tags, and listed state. Uses server-side filtering where supported and returns compact resource summaries.",
     inputSchema: {
       type: "object",
-      properties: { ...catalogFilterInputProperties },
+      properties: { ...catalogFilterInputProperties, ...bypassCacheInputProperty },
       required: [],
     },
     outputSchema: CATALOG_LIST_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
     annotations: {
       title: "Search Catalog",
-      readOnlyHint: true,
+      readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
     },
@@ -288,12 +302,50 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
             "The unique resource identifier from mindvault_browse or mindvault_search. Example: 'cm7x8y9z'",
           examples: ["cm7x8y9z", "res-001", "ckx9j2h3f"],
         },
+        ...bypassCacheInputProperty,
       },
       required: ["resourceId"],
     },
     outputSchema: PREVIEW_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
     annotations: {
       title: "Preview Resource",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
+    name: "mindvault_compare_catalogs",
+    description:
+      "Compare the catalogs of two explicitly named network profiles (testnet and mainnet), read-only. Reports resources present on only one side and field-level differences (title, description, price, type, verification status, tags) for ids present on both, after normalizing price formatting, whitespace and tag order. Output identifies each side's network, API URL, and registry contract id. Performs GET reads only; no wallet is needed and nothing is written.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        left: {
+          type: "string",
+          enum: [...COMPARE_NETWORKS],
+          description: "First profile to compare: testnet or mainnet.",
+          examples: ["testnet"],
+        },
+        right: {
+          type: "string",
+          enum: [...COMPARE_NETWORKS],
+          description: "Second profile to compare; must differ from left.",
+          examples: ["mainnet"],
+        },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: COMPARE_MAX_LIMIT,
+          description: `Max resources read from each profile (1-${COMPARE_MAX_LIMIT}, default ${COMPARE_DEFAULT_LIMIT}).`,
+          examples: [50],
+        },
+      },
+      required: ["left", "right"],
+    },
+    outputSchema: COMPARE_CATALOGS_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
+    annotations: {
+      title: "Compare Catalogs",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -443,6 +495,12 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
             "Optional interval in milliseconds between settlement status polls when wait is true. Default 2000, minimum 200.",
           default: 2000,
           examples: [500, 2000],
+        },
+        idempotencyKey: {
+          type: "string",
+          description:
+            "Optional client-chosen key (letters, digits, dot, dash, underscore, colon; max 128). When set, the attempt is recorded so mindvault_purchase_status can resolve it if the response is lost. A key that already settled is not paid again.",
+          examples: ["buy-cm7x8y9z-2026-01-01"],
         },
       },
       required: ["resourceId"],
@@ -642,6 +700,19 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     outputSchema: REGISTRY_INFO_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
     annotations: {
       title: "Registry Info",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
+    name: "mindvault_contract_preflight",
+    description:
+      "Read the configured registry's on-chain identity, network ID, and Resource schema version. Reports whether the contract ID, configured Stellar network, and schema are compatible, with specific fixes for mismatches. Run this before publish or on-chain registration; it never writes to the contract.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    outputSchema: CONTRACT_PREFLIGHT_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
+    annotations: {
+      title: "Contract Preflight",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -938,9 +1009,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
     annotations: {
       title: "Back Up State",
-      readOnlyHint: true,
+      readOnlyHint: false,
       destructiveHint: false,
-      idempotentHint: true,
+      idempotentHint: false,
     },
   },
   {
@@ -1033,7 +1104,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       title: "Tool Metrics",
       readOnlyHint: false,
       destructiveHint: false,
-      idempotentHint: true,
+      idempotentHint: false,
     },
   },
   {
@@ -1414,7 +1485,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     inputSchema: { type: "object", properties: {}, required: [] },
     annotations: {
       title: "Pre-warm Catalog Cache",
-      readOnlyHint: true,
+      readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
     },
@@ -1567,6 +1638,36 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
+    name: "mindvault_support_bundle",
+    description:
+      "Export a redacted support bundle for one incident, identified by the correlation ID a failed tool call reported (mv-...). Includes only the audit-log entries for that incident, the tools they name and their metrics, the active profile's address, and the resolved network settings. Bounded and deterministic; wallet secrets, API keys, tokens and other profiles are never included. Local and read-only, no network calls.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        incidentId: {
+          type: "string",
+          description:
+            "Correlation ID of the incident, as reported by the failing tool call. Example: 'mv-lx3k9a2-4f7q'.",
+          examples: ["mv-lx3k9a2-4f7q"],
+        },
+        maxEntries: {
+          type: "integer",
+          minimum: 1,
+          maximum: 200,
+          description: "Maximum audit-log entries to include (1–200, default 100). Newest are kept.",
+          examples: [50, 200],
+        },
+      },
+      required: ["incidentId"],
+    },
+    annotations: {
+      title: "Export Support Bundle",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
     name: "mindvault_recover_catalog_cache",
     description:
       "Attempt a catalog stale-cache recovery: requests the MCP to refresh or re-fetch catalog index data and provides recovery guidance. Useful when browse results appear stale.",
@@ -1654,6 +1755,29 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     outputSchema: PURCHASE_HISTORY_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
     annotations: {
       title: "Purchase History",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
+    name: "mindvault_purchase_status",
+    description:
+      "Resolve a mindvault_buy attempt by its client idempotencyKey when the tool response never reached you. Read-only and scoped to the active wallet profile: another profile's key reads as unknown. Returns state unknown (no attempt recorded), pending (started, outcome not recorded), settled (with txHash and receiptRef) or failed (no payment was made).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        idempotencyKey: {
+          type: "string",
+          description: "The idempotencyKey that was passed to mindvault_buy.",
+          examples: ["buy-cm7x8y9z-2026-01-01"],
+        },
+      },
+      required: ["idempotencyKey"],
+    },
+    outputSchema: PURCHASE_STATUS_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
+    annotations: {
+      title: "Purchase Status",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

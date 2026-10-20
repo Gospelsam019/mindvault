@@ -23,10 +23,17 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { listCatalogResources, readCatalogResource } from "./catalogResources.js";
+import {
+  MCP_TOOL_CAPABILITY_VERSION,
+  SERVER_METADATA_URI,
+  readServerMetadata,
+  serverMetadataResource,
+} from "./serverMetadataResource.js";
 import { PROMPT_DEFINITIONS, getPrompt } from "./prompts.js";
 import { createProgressEmitter, scopeProgressToRequest } from "./progress.js";
 import { truncateResponse } from "./truncation.js";
 import { applyPreviewLimits, serializePreview } from "./previewLimits.js";
+import { resolvePurchaseIdempotencyKey } from "./purchaseIdempotencyKey.js";
 import { createEd25519Signer } from "@x402/stellar";
 import { ExactStellarScheme } from "@x402/stellar/exact/client";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
@@ -36,6 +43,11 @@ import { homedir } from "os";
 import { join } from "path";
 import { cacheStalenessNotice } from "./cacheStaleness.js";
 import { buildConfig, resolveConfig } from "./config.js";
+import {
+  assertContractPreflightReady,
+  checkContractPreflight,
+  skippedContractPreflight,
+} from "./contractPreflight.js";
 import {
   assertMainnetMutationAllowed,
   formatMainnetBanner,
@@ -73,12 +85,22 @@ import {
   mockSetTags,
 } from "./mock.js";
 import { purchaseHistoryTool, recordPurchase } from "./purchaseHistory.js";
+import { lookupPurchaseStatus, trackPurchaseAttempt } from "./purchaseStatusLookup.js";
+import {
+  cancellableSleep,
+  canceledToolResult,
+  isToolCanceled,
+  runCancellable,
+} from "./toolCancellation.js";
 import { Mutex } from "./mutex.js";
 import { exportReceiptsTool } from "./receipts.js";
 import { debugBundleTool } from "./debugBundle.js";
+import { supportBundleTool } from "./supportBundle.js";
+import { compareCatalogsTool } from "./catalogCompare.js";
+import { applyCatalogCursor, attachNextCatalogCursor, nextCatalogCursor } from "./catalogCursor.js";
 import { exportReceiptsToolWithTimeout } from "./receipts.js";
 import { normalizeToolResult, outcomeText, type ToolOutcome } from "./toolResult.js";
-import { advertisedTools, hasOutputSchema } from "./toolSurface.js";
+import { advertisedTools, outputSchemaFor } from "./toolSurface.js";
 import { dryRunPublish, dryRunBuy, type DryRunPublishLive } from "./dryRun.js";
 import { initAuditLogging } from "./auditLog.js";
 import { REGISTRY_LIST_DEFAULT_LIMIT, REGISTRY_LIST_DEFAULT_START } from "./registryPagination.js";
@@ -172,6 +194,12 @@ import {
   type TimeoutService,
 } from "./httpTimeout.js";
 import { resolveToolTimeouts, timeoutForTool } from "./toolTimeoutOverrides.js";
+import { assertTimeoutsWithinDeadline, resolveTransportDeadline } from "./timeoutBounds.js";
+import {
+  isAmbiguousOutcome,
+  resolveRegistrationOutcome,
+  uncertainPublishOutcome,
+} from "./publishRetryPolicy.js";
 import {
   describeRetryPolicy,
   formatRetryLog,
@@ -228,6 +256,8 @@ import {
   recordCatalogSnapshot,
   recordPreviewSnapshot,
 } from "./catalogCache.js";
+import { resolveCacheBypass, withBypassNotice } from "./catalogCacheBypass.js";
+import { buildCatalogCacheScope, setCatalogCacheScopeProvider } from "./catalogCacheScope.js";
 import {
   publishBatch,
   type BatchPublishItem,
@@ -300,6 +330,7 @@ const httpFetch: typeof fetch = MOCK
 
 const TIMEOUTS = resolveTimeouts(process.env);
 const TOOL_TIMEOUTS = resolveToolTimeouts(process.env).overrides;
+assertTimeoutsWithinDeadline(TIMEOUTS, TOOL_TIMEOUTS, resolveTransportDeadline(process.env));
 
 const RETRY_POLICY = retryPolicyFromEnv(process.env);
 
@@ -1831,6 +1862,17 @@ function catalogFallbackFor(err: unknown): CatalogFallbackReason | null {
   return isRetryableStatus(mapped.status) ? { kind: "status", status: mapped.status } : null;
 }
 
+// Snapshots are isolated per profile, network id, registry contract and API
+// origin, so a profile or network switch cannot surface another context's data (#85).
+setCatalogCacheScopeProvider(() =>
+  buildCatalogCacheScope({
+    profile: activeProfileName,
+    networkId: String(NETWORK),
+    contractId: REGISTRY_CONTRACT_ID,
+    apiUrl: BASE_URL,
+  }),
+);
+
 /** Resolve a failed catalog read to a snapshot, or rethrow when it must surface. */
 function catalogSnapshotFor(err: unknown): { resources: unknown[]; notice: string } | null {
   const reason = catalogFallbackFor(err);
@@ -1843,7 +1885,14 @@ function catalogSnapshotFor(err: unknown): { resources: unknown[]; notice: strin
   };
 }
 
+async function browseOutcome(
+  filters: CatalogFilters = {},
+  bypassCache = false,
+): Promise<ToolOutcome> {
 async function browseOutcome(filters: CatalogFilters = {}): Promise<ToolOutcome> {
+  const resumed = applyCatalogCursor(filters, NETWORK);
+  if (!resumed.ok) return resumed.error;
+  filters = resumed.filters;
   const qs = buildCatalogQueryString(filters);
   const url = qs ? `${BASE_URL}/resources?${qs}` : `${BASE_URL}/resources`;
   let raw: any[] = [];
@@ -1862,9 +1911,9 @@ async function browseOutcome(filters: CatalogFilters = {}): Promise<ToolOutcome>
     }
     raw = Array.isArray(res.data) ? res.data : [];
     recordCatalogSnapshot(raw);
-    notice = cacheStalenessNotice(res.headers);
+    notice = withBypassNotice(cacheStalenessNotice(res.headers), bypassCache);
   } catch (err) {
-    const fallback = catalogSnapshotFor(err);
+    const fallback = bypassCache ? null : catalogSnapshotFor(err);
     if (!fallback) throw err;
     raw = Array.isArray(fallback.resources) ? (fallback.resources as any[]) : [];
     notice = fallback.notice;
@@ -1883,14 +1932,20 @@ async function browseOutcome(filters: CatalogFilters = {}): Promise<ToolOutcome>
         ? `No resources match ${describeCatalogFilters(filters)}.`
         : "No resources listed yet."
       : items.map(formatResource).join("\n\n");
-  return catalogOutcome(items, body, notice);
+  return attachNextCatalogCursor(
+    catalogOutcome(items, body, notice),
+    items.length > 0 ? nextCatalogCursor(filters, raw.length, NETWORK) : null,
+  );
 }
 
 export async function browse(filters: CatalogFilters = {}): Promise<string> {
   return outcomeText(await browseOutcome(filters));
 }
 
-async function searchOutcome(filtersOrQuery: string | CatalogFilters): Promise<ToolOutcome> {
+async function searchOutcome(
+  filtersOrQuery: string | CatalogFilters,
+  bypassCache = false,
+): Promise<ToolOutcome> {
   const filters: CatalogFilters =
     typeof filtersOrQuery === "string" ? { query: filtersOrQuery } : filtersOrQuery;
 
@@ -1929,9 +1984,9 @@ async function searchOutcome(filtersOrQuery: string | CatalogFilters): Promise<T
     }
     raw = Array.isArray(res.data) ? res.data : [];
     recordCatalogSnapshot(raw);
-    notice = cacheStalenessNotice(res.headers);
+    notice = withBypassNotice(cacheStalenessNotice(res.headers), bypassCache);
   } catch (err) {
-    const fallback = catalogSnapshotFor(err);
+    const fallback = bypassCache ? null : catalogSnapshotFor(err);
     if (!fallback) throw err;
     raw = Array.isArray(fallback.resources) ? (fallback.resources as any[]) : [];
     notice = fallback.notice;
@@ -1957,7 +2012,10 @@ export async function search(filtersOrQuery: string | CatalogFilters): Promise<s
  * reachable-but-error response is surfaced verbatim — the cache only covers the
  * unreachable case.
  */
-async function previewData(resourceId: string): Promise<{ r: any; label: string | null }> {
+async function previewData(
+  resourceId: string,
+  bypassCache = false,
+): Promise<{ r: any; label: string | null }> {
   try {
     const res = await jsonFetch(`${BASE_URL}/resources/${resourceId}/meta`);
     if (!res.ok)
@@ -1972,15 +2030,15 @@ async function previewData(resourceId: string): Promise<{ r: any; label: string 
   } catch (err) {
     // Same rule as browse/search: a snapshot answers for a catalog that could
     // not answer, never for a 404 on an id the agent got wrong (#837).
-    const reason = catalogFallbackFor(err);
+    const reason = bypassCache ? null : catalogFallbackFor(err);
     const snap = reason ? getPreviewSnapshot(resourceId) : null;
     if (!snap || !reason) throw err;
     return { r: snap.meta as any, label: catalogCacheLabel(snap.savedAtMs, Date.now(), reason) };
   }
 }
 
-export async function preview(resourceId: string): Promise<string> {
-  const { r, label } = await previewData(resourceId);
+export async function preview(resourceId: string, bypassCache = false): Promise<string> {
+  const { r, label } = await previewData(resourceId, bypassCache);
   // Publisher-supplied title/description are unbounded at the source, so cap
   // them before serializing rather than truncating the JSON afterwards (#582).
   const out: Record<string, unknown> = applyPreviewLimits({
@@ -1993,6 +2051,7 @@ export async function preview(resourceId: string): Promise<string> {
     accessUrl: r.accessUrl,
   });
   if (label) out.offlineCache = label;
+  else if (bypassCache) out.cache = "bypassed";
   return serializePreview(out);
 }
 
@@ -2003,7 +2062,7 @@ async function fetchPublishStatusData(resourceId: string): Promise<PublishStatus
 }
 
 function sleepMs(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return cancellableSleep(ms);
 }
 
 export async function publishStatus(
@@ -2133,19 +2192,27 @@ async function publish(args: {
     );
   }
 
+  await requireCompatibleRegistry();
   const snapshot = captureProfileSnapshot();
   const apiKey = snapshot.apiKey ?? requireApiKey();
 
-  const createRes = await jsonFetch(`${snapshot.baseUrl}/resources`, {
-    method: "POST",
-    headers: { "x-api-key": apiKey },
-    body: JSON.stringify({
-      title: args.title,
-      description: args.description,
-      price: args.price,
-      externalUrl: args.externalUrl,
-    }),
-  });
+  let createRes: ApiResponse<any>;
+  try {
+    createRes = await jsonFetch(`${snapshot.baseUrl}/resources`, {
+      method: "POST",
+      headers: { "x-api-key": apiKey },
+      body: JSON.stringify({
+        title: args.title,
+        description: args.description,
+        price: args.price,
+        externalUrl: args.externalUrl,
+      }),
+    });
+  } catch (err) {
+    // The server may have created the resource even though the response was lost.
+    if (isAmbiguousOutcome(err)) return uncertainPublishOutcome(args.title, args.externalUrl);
+    throw err;
+  }
   if (!createRes.ok)
     throwHttpError({
       operation: "Publish failed",
@@ -2204,10 +2271,20 @@ async function publish(args: {
       .join("\n");
   }
 
-  const registerRes = await jsonFetch(`${BASE_URL}/resources/${resource.id}/register`, {
-    method: "POST",
-    headers: { "x-api-key": apiKey },
-  });
+  let registerRes: ApiResponse<any>;
+  try {
+    registerRes = await jsonFetch(`${BASE_URL}/resources/${resource.id}/register`, {
+      method: "POST",
+      headers: { "x-api-key": apiKey },
+    });
+  } catch (err) {
+    if (isAmbiguousOutcome(err)) {
+      return resolveRegistrationOutcome(resource.id, (id) =>
+        jsonFetch(`${BASE_URL}/resources/${id}`),
+      );
+    }
+    throw err;
+  }
 
   const onchainStatus: string = registerRes.ok
     ? (registerRes.data.onchainStatus ?? "registered")
@@ -2281,6 +2358,7 @@ export async function buy(
   wait?: unknown,
   timeoutMs?: unknown,
   intervalMs?: unknown,
+  idempotencyKey?: string,
 ): Promise<string> {
   if (dryRun) {
     const initialDryRun = dryRunBuy(
@@ -2367,7 +2445,18 @@ export async function buy(
   let res: Response;
   try {
     await onProgress?.(2, 4, "Submitting payment");
-    res = await paidFetch(`${snapshot.baseUrl}/resources/${resourceId}`);
+    // Same intent -> same key, so a retry after a lost response is recognised (#73).
+    const purchaseKey = resolvePurchaseIdempotencyKey(
+      {
+        network: snapshot.network,
+        payer: snapshot.wallet.publicKey,
+        resourceId,
+      },
+      idempotencyKey,
+    );
+    res = await paidFetch(`${snapshot.baseUrl}/resources/${resourceId}`, {
+      headers: { "Idempotency-Key": purchaseKey },
+    });
   } catch (err) {
     metrics.recordPayment(false);
     throw mcpError(mapTransportError({ operation: "Buy failed", source: "x402", error: err }));
@@ -2484,6 +2573,7 @@ export async function registerOnchain(
   const apiKey = requireApiKey();
   if (!resourceId) throw new Error("resourceId is required.");
 
+  await requireCompatibleRegistry();
   await onProgress?.(1, 3, "Preparing transaction");
   const prep = await jsonFetch(`${BASE_URL}/resources/${resourceId}/register/prepare`, {
     headers: { "x-api-key": apiKey },
@@ -2524,11 +2614,21 @@ export async function registerOnchain(
   const signedXdr = tx.toXDR();
 
   await onProgress?.(3, 3, "Submitting transaction");
-  const submit = await jsonFetch(`${BASE_URL}/resources/${resourceId}/register`, {
-    method: "POST",
-    headers: { "x-api-key": apiKey },
-    body: JSON.stringify({ signedXdr }),
-  });
+  let submit: ApiResponse<any>;
+  try {
+    submit = await jsonFetch(`${BASE_URL}/resources/${resourceId}/register`, {
+      method: "POST",
+      headers: { "x-api-key": apiKey },
+      body: JSON.stringify({ signedXdr }),
+    });
+  } catch (err) {
+    if (isAmbiguousOutcome(err)) {
+      return resolveRegistrationOutcome(resourceId, (id) =>
+        jsonFetch(`${BASE_URL}/resources/${id}`),
+      );
+    }
+    throw err;
+  }
   if (!submit.ok) {
     const txHash =
       submit.data && typeof submit.data === "object"
@@ -3445,6 +3545,40 @@ function registryInfo(): string {
   return JSON.stringify(info, null, 2);
 }
 
+async function contractPreflightResult() {
+  if (_isMock()) {
+    return skippedContractPreflight(
+      REGISTRY_CONTRACT_ID,
+      STELLAR_NETWORK,
+      SOROBAN_RPC_URL,
+      REGISTRY_NETWORK_PASSPHRASE,
+    );
+  }
+  return checkContractPreflight({
+    contractId: REGISTRY_CONTRACT_ID,
+    network: STELLAR_NETWORK,
+    rpcUrl: SOROBAN_RPC_URL,
+    networkPassphrase: REGISTRY_NETWORK_PASSPHRASE,
+    readRegistryInfo: async () => {
+      const client = createRegistryClient({
+        contractId: REGISTRY_CONTRACT_ID,
+        rpcUrl: SOROBAN_RPC_URL,
+        networkPassphrase: REGISTRY_NETWORK_PASSPHRASE,
+      });
+      return (await client.registry_info()).result;
+    },
+  });
+}
+
+export async function contractPreflight(): Promise<string> {
+  return JSON.stringify(await contractPreflightResult(), null, 2);
+}
+
+async function requireCompatibleRegistry(): Promise<void> {
+  if (_isMock()) return;
+  assertContractPreflightReady(await contractPreflightResult());
+}
+
 export async function checkConsistency(
   resourceId: string,
   expectedMetadataHash?: string,
@@ -3954,14 +4088,14 @@ async function dispatchToolOutcome(
         return listProfilesOutcome();
       case "mindvault_browse": {
         const parsed = parseCatalogFilters(rawRecord);
-        return parsed.ok ? browseOutcome(parsed.filters) : parsed.error;
+        return parsed.ok ? browseOutcome(parsed.filters, resolveCacheBypass(rawRecord)) : parsed.error;
       }
       case "mindvault_search": {
         const parsed = parseCatalogFilters(rawRecord, { requireCriteria: true });
-        return parsed.ok ? searchOutcome(parsed.filters) : parsed.error;
+        return parsed.ok ? searchOutcome(parsed.filters, resolveCacheBypass(rawRecord)) : parsed.error;
       }
       case "mindvault_preview":
-        return preview(requiredString(args, "resourceId"));
+        return preview(requiredString(args, "resourceId"), resolveCacheBypass(rawRecord));
       case "mindvault_register":
         return register(
           requiredString(args, "name"),
@@ -4009,18 +4143,26 @@ async function dispatchToolOutcome(
             externalUrl: item.externalUrl,
           };
         });
+        await requireCompatibleRegistry();
         return publishBatch(typedItems, onProgress);
       }
       case "mindvault_buy":
-        return buy(
+        return trackPurchaseAttempt(
+          activeProfileName,
+          optionalString(dryRunArgs, "idempotencyKey"),
           requiredString(dryRunArgs, "resourceId"),
           flag(dryRunArgs, "dryRun"),
-          undefined,
-          onProgress,
-          optionalString(dryRunArgs, "maxAutoPayUsdc"),
-          args.wait,
-          args.timeoutMs,
-          args.intervalMs,
+          () =>
+            buy(
+              requiredString(dryRunArgs, "resourceId"),
+              flag(dryRunArgs, "dryRun"),
+              undefined,
+              onProgress,
+              optionalString(dryRunArgs, "maxAutoPayUsdc"),
+              args.wait,
+              args.timeoutMs,
+              args.intervalMs,
+            ),
         );
       case "mindvault_buy_lease":
         return buyLease(requiredString(args, "resourceId"), requiredString(args, "tier"), {
@@ -4032,6 +4174,8 @@ async function dispatchToolOutcome(
         return leaseStatus(requiredString(args, "resourceId"), optionalString(args, "holder"));
       case "mindvault_purchase_history":
         return purchaseHistoryTool(rawRecord);
+      case "mindvault_purchase_status":
+        return lookupPurchaseStatus(activeProfileName, requiredString(args, "idempotencyKey"));
       case "mindvault_export_receipts":
         return exportReceiptsToolWithTimeout(
           rawRecord,
@@ -4043,6 +4187,8 @@ async function dispatchToolOutcome(
         return agentStatus();
       case "mindvault_registry_info":
         return registryInfo();
+      case "mindvault_contract_preflight":
+        return contractPreflight();
       case "mindvault_terms":
         return publisherTerms(
           requiredString(args, "operation"),
@@ -4080,6 +4226,8 @@ async function dispatchToolOutcome(
         );
       case "mindvault_registry_count":
         return registryCount(optionalString(args, "creator"));
+      case "mindvault_compare_catalogs":
+        return compareCatalogsTool(args, jsonFetch);
       case "mindvault_update_metadata":
         return updateMetadata(requiredString(args, "resourceId"), requiredString(args, "metadata"));
       case "mindvault_set_price":
@@ -4135,6 +4283,8 @@ async function dispatchToolOutcome(
         return formatVerifyInstall(verifyInstall(process.env));
       case "mindvault_debug_bundle":
         return debugBundleTool(rawRecord);
+      case "mindvault_support_bundle":
+        return supportBundleTool(rawRecord);
       case "mindvault_recover_catalog_cache":
         return recoverCatalogCache();
       case "mindvault_wallet_balances":
@@ -4163,7 +4313,7 @@ export async function dispatchTool(
 
 /** Test helper: wrap a handler outcome the same way CallTool does. */
 export function normalizeToolResultForTest(name: string, outcome: ToolOutcome) {
-  return normalizeToolResult(name, outcome, hasOutputSchema);
+  return normalizeToolResult(name, outcome, outputSchemaFor);
 }
 
 const server = new Server(
@@ -4177,12 +4327,27 @@ const server = new Server(
 // invoking a tool. URIs are stable: mindvault://resource/<id>. Reads never
 // return gated content — only the public meta endpoint is consulted.
 
-server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-  resources: await listCatalogResources(),
-}));
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  let catalogResources = [];
+  try {
+    catalogResources = await listCatalogResources();
+  } catch {
+    logger.warn("MindVault MCP catalog resources unavailable; exposing server metadata only.");
+  }
+  return { resources: [serverMetadataResource(), ...catalogResources] };
+});
 
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => ({
-  contents: [await readCatalogResource(request.params.uri)],
+  contents: [
+    request.params.uri === SERVER_METADATA_URI
+      ? readServerMetadata(request.params.uri, {
+          activeNetwork: STELLAR_NETWORK,
+          registryId: REGISTRY_CONTRACT_ID || null,
+          toolCapabilityVersion: MCP_TOOL_CAPABILITY_VERSION,
+          status: "running",
+        })
+      : await readCatalogResource(request.params.uri),
+  ],
 }));
 
 // ListTools is derived from TOOL_DEFINITIONS rather than restated here (#596).
@@ -4209,7 +4374,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       : undefined;
   try {
     const result = await measureTool(metrics, name, () =>
-      dispatchToolOutcome(name, args, progress?.emit),
+      runCancellable(name, extra?.signal, () => dispatchToolOutcome(name, args, progress?.emit)),
     );
     // Opt-in structured telemetry stream (#891): one OTLP line to stderr per
     // tool call when MINDVAULT_METRICS_EXPORT_CONSOLE is set, so a log
@@ -4217,13 +4382,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     if (metricsExportToConsoleEnabled(process.env) && metrics.enabled) {
       console.error(metricsExportLine(metrics.snapshot(), "otlp"));
     }
-    return normalizeToolResult(name, result, hasOutputSchema);
+    return normalizeToolResult(name, result, outputSchemaFor);
   } catch (err: any) {
+    if (isToolCanceled(err)) return canceledToolResult(name);
     const mapped = mappedErrorOf(err);
     return {
       content: [{ type: "text", text: `Error: ${safeErrorMessage(err)}` }],
       isError: true,
-      ...(mapped ? { structuredContent: { troubleshooting: troubleshootingHint(mapped) } } : {}),
+      ...(mapped && !outputSchemaFor(name)
+        ? { structuredContent: { troubleshooting: troubleshootingHint(mapped) } }
+        : {}),
     };
   } finally {
     await progress?.settle();
