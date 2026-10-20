@@ -44,6 +44,11 @@ import { join } from "path";
 import { cacheStalenessNotice } from "./cacheStaleness.js";
 import { buildConfig, resolveConfig } from "./config.js";
 import {
+  assertContractPreflightReady,
+  checkContractPreflight,
+  skippedContractPreflight,
+} from "./contractPreflight.js";
+import {
   assertMainnetMutationAllowed,
   formatMainnetBanner,
   formatMainnetDiagnostics,
@@ -2187,6 +2192,7 @@ async function publish(args: {
     );
   }
 
+  await requireCompatibleRegistry();
   const snapshot = captureProfileSnapshot();
   const apiKey = snapshot.apiKey ?? requireApiKey();
 
@@ -2567,6 +2573,7 @@ export async function registerOnchain(
   const apiKey = requireApiKey();
   if (!resourceId) throw new Error("resourceId is required.");
 
+  await requireCompatibleRegistry();
   await onProgress?.(1, 3, "Preparing transaction");
   const prep = await jsonFetch(`${BASE_URL}/resources/${resourceId}/register/prepare`, {
     headers: { "x-api-key": apiKey },
@@ -3538,6 +3545,40 @@ function registryInfo(): string {
   return JSON.stringify(info, null, 2);
 }
 
+async function contractPreflightResult() {
+  if (_isMock()) {
+    return skippedContractPreflight(
+      REGISTRY_CONTRACT_ID,
+      STELLAR_NETWORK,
+      SOROBAN_RPC_URL,
+      REGISTRY_NETWORK_PASSPHRASE,
+    );
+  }
+  return checkContractPreflight({
+    contractId: REGISTRY_CONTRACT_ID,
+    network: STELLAR_NETWORK,
+    rpcUrl: SOROBAN_RPC_URL,
+    networkPassphrase: REGISTRY_NETWORK_PASSPHRASE,
+    readRegistryInfo: async () => {
+      const client = createRegistryClient({
+        contractId: REGISTRY_CONTRACT_ID,
+        rpcUrl: SOROBAN_RPC_URL,
+        networkPassphrase: REGISTRY_NETWORK_PASSPHRASE,
+      });
+      return (await client.registry_info()).result;
+    },
+  });
+}
+
+export async function contractPreflight(): Promise<string> {
+  return JSON.stringify(await contractPreflightResult(), null, 2);
+}
+
+async function requireCompatibleRegistry(): Promise<void> {
+  if (_isMock()) return;
+  assertContractPreflightReady(await contractPreflightResult());
+}
+
 export async function checkConsistency(
   resourceId: string,
   expectedMetadataHash?: string,
@@ -4102,6 +4143,7 @@ async function dispatchToolOutcome(
             externalUrl: item.externalUrl,
           };
         });
+        await requireCompatibleRegistry();
         return publishBatch(typedItems, onProgress);
       }
       case "mindvault_buy":
@@ -4145,6 +4187,8 @@ async function dispatchToolOutcome(
         return agentStatus();
       case "mindvault_registry_info":
         return registryInfo();
+      case "mindvault_contract_preflight":
+        return contractPreflight();
       case "mindvault_terms":
         return publisherTerms(
           requiredString(args, "operation"),

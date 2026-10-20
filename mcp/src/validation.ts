@@ -349,6 +349,7 @@ export const TOOL_ARGUMENT_SPECS: Record<string, ToolArgumentSpec> = {
   },
   mindvault_agent_status: {},
   mindvault_registry_info: {},
+  mindvault_contract_preflight: {},
   mindvault_terms: {
     operation: { kind: "enum", required: true, values: ["get", "set"] },
     creator: STELLAR_ADDRESS,

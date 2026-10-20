@@ -64,6 +64,7 @@ const VALID_CALLS: Record<string, Record<string, unknown>> = {
   mindvault_register_onchain: { resourceId: "res-001" },
   mindvault_agent_status: {},
   mindvault_registry_info: {},
+  mindvault_contract_preflight: {},
   mindvault_terms: {
     operation: "get",
     creator: "GA6HCMBLTZS5VYYBCATRBRZ3BZJMAFUDKYYF6AH6MVCMGWMRDNSWJPIH",

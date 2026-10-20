@@ -28,6 +28,7 @@ import {
   ATTESTATION_VERIFICATION_OUTPUT_SCHEMA,
   BATCH_CATALOG_LOOKUP_OUTPUT_SCHEMA,
   CATALOG_LIST_OUTPUT_SCHEMA,
+  CONTRACT_PREFLIGHT_OUTPUT_SCHEMA,
   CONSISTENCY_OUTPUT_SCHEMA,
   FEE_CONFIG_OUTPUT_SCHEMA,
   LIST_PROFILES_OUTPUT_SCHEMA,
@@ -699,6 +700,19 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     outputSchema: REGISTRY_INFO_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
     annotations: {
       title: "Registry Info",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
+    name: "mindvault_contract_preflight",
+    description:
+      "Read the configured registry's on-chain identity, network ID, and Resource schema version. Reports whether the contract ID, configured Stellar network, and schema are compatible, with specific fixes for mismatches. Run this before publish or on-chain registration; it never writes to the contract.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    outputSchema: CONTRACT_PREFLIGHT_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
+    annotations: {
+      title: "Contract Preflight",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

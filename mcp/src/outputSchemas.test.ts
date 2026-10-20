@@ -13,6 +13,7 @@ import {
   PURCHASE_HISTORY_OUTPUT_SCHEMA,
   RECOVER_CACHE_OUTPUT_SCHEMA,
   REGISTRY_INFO_OUTPUT_SCHEMA,
+  CONTRACT_PREFLIGHT_OUTPUT_SCHEMA,
   REGISTRY_LOOKUP_OUTPUT_SCHEMA,
   TEXT_ONLY_TOOLS,
   TEXT_RESULT_SCHEMA,
@@ -166,6 +167,20 @@ describe("representative payloads match advertised required keys", () => {
       x402Network: "stellar:testnet",
       resourceFields: ["id"],
       mainnetDiagnostics: "",
+    });
+    assertKeys(CONTRACT_PREFLIGHT_OUTPUT_SCHEMA, {
+      status: "ready",
+      ready: true,
+      message: "compatible",
+      contractId: "C…",
+      network: "testnet",
+      rpcUrl: "https://rpc",
+      expectedNetworkId: "abc",
+      deployedNetworkId: "abc",
+      registryName: "mindvault-vault-registry",
+      deployedSchemaVersion: 6,
+      supportedSchemaVersions: [6],
+      issues: [],
     });
     assertKeys(RECOVER_CACHE_OUTPUT_SCHEMA, {
       source: "mcp",

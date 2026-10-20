@@ -1,4 +1,4 @@
-#![no_std]
+﻿#![no_std]
 //! MindVault on-chain vault registry.
 //!
 //! Records each vault resource on Stellar: its creator, price (in USDC base
@@ -77,6 +77,8 @@ pub const FIELD_MASK_LIFECYCLE: u32 = 1 << 9;
 /// `set_flag_reason_hash`. Same bound as `MAX_TERMS_HASH_LEN` — both store a
 /// fixed-size digest of arbitrary off-chain content.
 pub const MAX_FLAG_REASON_HASH_LEN: u32 = 64;
+/// Maximum length of an optional dispute reason hash attached to refunds (MAX_REFUND_REASON_HASH_LEN).
+pub const MAX_REFUND_REASON_HASH_LEN: u32 = 64;
 const MAX_TAGS: u32 = 8;
 /// Decimal places in Stellar USDC, so 1 USDC is `10^7` base units. A USDC base
 /// unit is *not* a "stroop" (a stroop is `10^-5` XLM — a 100x difference).
@@ -104,6 +106,9 @@ pub const TOP_TAGS_CAP: u32 = 20;
 pub const MAX_BATCH_REGISTER: u32 = 10;
 /// Maximum number of prices that can be updated in one `set_price_many` call.
 pub const MAX_BATCH_PRICE_UPDATES: u32 = 10;
+/// Maximum number of ids accepted by a single `repair_index_chunk` call, so
+/// each chunked index-repair transaction stays bounded on large registries.
+pub const REPAIR_INDEX_CHUNK_CAP: u32 = 50;
 
 // ── Fee / royalty configuration ──────────────────────────────────────────────
 /// Fee basis-point ceiling: 50 % (5 000 bp). Neither platform_fee_bps nor
@@ -284,6 +289,7 @@ pub const METHOD_SCHEMA: &[(&str, &str)] = &[
     ("preview_fee_split", "—"),
     // ── Index repair ──────────────────────────────────────────────────────
     ("repair_index", "admin"),
+    ("repair_index_chunk", "admin"),
     ("repair_tag_index", "admin"),
     // ── Payment receipts ──────────────────────────────────────────────────
     ("record_payment", "settler + payer"),
@@ -358,7 +364,7 @@ pub const ERROR_SCHEMA: &[(u32, &str, &str)] = &[
     (20, "InvalidVerificationTransition", "The requested `VerificationStatus` transition is not allowed (e.g. same-status no-op, or reverting to `Pending`)."),
     (21, "AlreadyFrozen", "`freeze_metadata` was called on a resource whose metadata is already frozen."),
     (22, "MetadataFrozen", "`update_metadata` was called on a resource whose metadata has been frozen."),
-    (23, "DuplicateInRepair", "`repair_index` received a list with duplicate resource ids."),
+    (23, "DuplicateInRepair", "`repair_index` or `repair_index_chunk` received a list with duplicate resource ids."),
     (24, "InvalidTxHash", "A payment or refund `tx_hash` is empty or exceeds `MAX_TX_HASH_LEN` (128 bytes)."),
     (25, "InvalidPaymentAmount", "A payment or refund `amount` is `<= 0`, or a refund window is outside its allowed bounds."),
     (26, "NotModerator", "Caller does not hold the moderator role."),
@@ -372,7 +378,7 @@ pub const ERROR_SCHEMA: &[(u32, &str, &str)] = &[
     (34, "FeeBpsTooHigh", "A fee or fee-destination basis-point value exceeds its configured ceiling."),
     (35, "TotalFeeTooHigh", "The combined fee policy or fee-destination split is invalid."),
     (36, "CountOverflow", "The global resource count would overflow `u32`."),
-    (37, "BatchTooLarge", "`get_many` or `get_owner_many` was called with more than 20 ids."),
+    (37, "BatchTooLarge", "`get_many` or `get_owner_many` received more than 20 ids, or `repair_index_chunk` received more than `REPAIR_INDEX_CHUNK_CAP` (50) ids."),
     (38, "DuplicateReceipt", "A purchase receipt is already anchored for `(resource_id, buyer)`."),
     (39, "FlagReasonHashTooLong", "`reason_hash` in `set_flag_reason_hash` exceeds `MAX_FLAG_REASON_HASH_LEN` (64 bytes)."),
     (40, "ContractPaused", "A state-changing method was called while the registry is paused."),
@@ -389,6 +395,7 @@ pub const ERROR_SCHEMA: &[(u32, &str, &str)] = &[
     (51, "InvalidMetadataPointers", "`set_metadata_pointers` received an empty, oversized (> `MAX_METADATA_POINTERS`), or duplicate pointer list, or an out-of-range `primary` index."),
     (52, "AdminAlreadySet", "`bootstrap_dual_admin` was called after an admin was already set."),
     (53, "RecoveryAdminNotSet", "`recover_admin` was called but no recovery admin is configured."),
+    (54, "InvalidRepairCursor", "`repair_index_chunk` received a cursor past the current `Count`, which would claim index slots the repair never wrote."),
 ];
 
 /// Canonical list of every event topic this contract emits, paired with a
@@ -490,7 +497,7 @@ pub const EVENT_SCHEMA: &[(&str, &str)] = &[
     ("refwin", "(old_window_ledgers: u32, new_window_ledgers: u32)"),
     (
         "refund",
-        "RefundReceipt { refund_id, payment_receipt_id, resource_id, recipient, amount, tx_hash, initiated_by, recorded_at, admin_override, remaining_balance }",
+        "RefundReceipt { refund_id, payment_receipt_id, resource_id, recipient, amount, tx_hash, initiated_by, recorded_at, admin_override, remaining_balance, reason_hash }",
     ),
     ("addmod", "RoleChange { admin, target, granted: true }"),
     ("rmmod", "RoleChange { admin, target, granted: false }"),
@@ -1165,6 +1172,7 @@ pub struct RefundReceipt {
     pub recorded_at: u32,
     pub admin_override: bool,
     pub remaining_balance: i128,
+    pub reason_hash: Option<String>,
 }
 
 /// Immutable on-chain anchor for a purchase receipt hash.
@@ -1391,6 +1399,9 @@ pub enum Error {
     AdminAlreadySet = 52,
     /// `recover_admin` was called but no recovery admin is configured.
     RecoveryAdminNotSet = 53,
+    /// A `repair_index_chunk` cursor exceeded the current `Count`, which would
+    /// claim index slots the repair never wrote.
+    InvalidRepairCursor = 54,
 }
 
 mod admin_nomination_cancel;
@@ -3518,6 +3529,89 @@ impl VaultRegistry {
         Ok(())
     }
 
+    /// Bounded, resumable variant of [`Self::repair_index`] for registries
+    /// too large to rebuild in a single transaction. Writes the next chunk of
+    /// an authoritative ordered id list into the pagination index and returns
+    /// the cursor to pass to the following call, so an interrupted repair
+    /// resumes safely from the last completed cursor.
+    ///
+    /// `ids` carries the next slice of the operator's authoritative list —
+    /// at most [`REPAIR_INDEX_CHUNK_CAP`] ids (else `BatchTooLarge`) — that
+    /// belongs at catalog positions `cursor..cursor + ids.len()`. Every id
+    /// must already exist as a registered `Resource` (else `NotFound`) and
+    /// the chunk must not contain duplicates (else `DuplicateInRepair`);
+    /// validation covers the whole chunk before any write, so a bad chunk
+    /// fails atomically exactly like `repair_index`. Duplicates spanning two
+    /// different chunks cannot be detected on-chain — the caller must
+    /// de-duplicate the authoritative list off-chain before chunking it.
+    ///
+    /// The chunk is written to `Index(cursor..cursor + ids.len())` and
+    /// `Count` is then set to `cursor + ids.len()` (checked add, else
+    /// `CountOverflow`), so `list`/`list_page`/`count` always expose a
+    /// fully validated prefix even mid-repair. `cursor` must not exceed the
+    /// current `Count` (else `InvalidRepairCursor`): that invariant is what
+    /// guarantees a chunk never claims an index slot the repair did not
+    /// write. An empty chunk is a silent no-op that returns `cursor`
+    /// unchanged and emits no event.
+    ///
+    /// Emits one `reindex` event per non-empty chunk, carrying the count
+    /// before the chunk and the count after it (the returned cursor), so
+    /// audit tooling sees incremental progress with the same topic the
+    /// atomic `repair_index` uses. Same derived-only boundary as
+    /// `repair_index`: `Resource` storage is never read for content,
+    /// written, or deleted. See `docs/index-repair.md` for the full
+    /// strategy.
+    pub fn repair_index_chunk(env: Env, ids: Vec<String>, cursor: u32) -> Result<u32, Error> {
+        let admin = Self::require_admin(&env)?;
+        admin.require_auth();
+        Self::require_not_paused(&env)?;
+
+        if ids.len() > REPAIR_INDEX_CHUNK_CAP {
+            return Err(Error::BatchTooLarge);
+        }
+
+        let old_count: u32 = env.storage().instance().get(&DataKey::Count).unwrap_or(0);
+        if cursor > old_count {
+            return Err(Error::InvalidRepairCursor);
+        }
+
+        let len = ids.len();
+        if len == 0 {
+            return Ok(cursor);
+        }
+
+        for i in 0..len {
+            let id = ids.get(i).unwrap();
+            if !env
+                .storage()
+                .persistent()
+                .has(&DataKey::Resource(id.clone()))
+            {
+                return Err(Error::NotFound);
+            }
+            for j in (i + 1)..len {
+                if id == ids.get(j).unwrap() {
+                    return Err(Error::DuplicateInRepair);
+                }
+            }
+        }
+
+        let end = cursor.checked_add(len).ok_or(Error::CountOverflow)?;
+
+        for i in 0..len {
+            let id = ids.get(i).unwrap();
+            let idx_key = DataKey::Index(cursor + i);
+            env.storage().persistent().set(&idx_key, &id);
+            Self::bump_persistent(&env, &idx_key);
+        }
+        env.storage().instance().set(&DataKey::Count, &end);
+        Self::bump_instance(&env);
+
+        env.events()
+            .publish((symbol_short!("reindex"), old_count), end);
+        Ok(end)
+    }
+
     /// Set the registry-level fee / royalty configuration. Only the admin may
     /// call this. Errors `AdminNotSet` if no admin has been set yet.
     ///
@@ -4945,10 +5039,11 @@ impl VaultRegistry {
     /// call this. Revocation is immediate and terminal: `lease_is_active`
     /// returns `false` from this ledger on, and the holder may buy a new
     /// lease afterwards. Errors `NotFound` if no lease exists for the pair
-    /// and `InvalidLeaseTransition` if it is already `Revoked`. Emits
-    /// `leaserevk`.
+    /// and `InvalidLeaseTransition` if it is already `Revoked`. Returns
+    /// `ContractPaused` while either pause is active. Emits `leaserevk`.
     pub fn revoke_lease(env: Env, resource_id: String, holder: Address) -> Result<Lease, Error> {
         Self::require_not_paused(&env)?;
+        Self::require_not_payments_paused(&env)?;
         Self::validate_resource_id(&resource_id)?;
         let resource = Self::load(&env, &resource_id)?;
         resource.creator.require_auth();
@@ -5246,6 +5341,7 @@ impl VaultRegistry {
         amount: i128,
         tx_hash: String,
         admin_override: bool,
+        reason_hash: Option<String>,
     ) -> Result<(), Error> {
         Self::require_not_paused(env)?;
         Self::require_not_payments_paused(env)?;
@@ -5253,6 +5349,16 @@ impl VaultRegistry {
         Self::validate_receipt_id(&payment_receipt_id)?;
         Self::validate_payment_amount(amount)?;
         Self::validate_tx_hash(&tx_hash)?;
+
+        if let Some(ref hash) = reason_hash {
+            Self::validate_bounded_string(
+                hash,
+                1,
+                MAX_REFUND_REASON_HASH_LEN,
+                Error::RefundReasonHashTooLong,
+                Error::RefundReasonHashTooLong,
+            )?;
+        }
 
         let refund_key = DataKey::RefundReceipt(refund_id.clone());
         if let Some(existing) = env
@@ -5266,6 +5372,7 @@ impl VaultRegistry {
                 && existing.tx_hash == tx_hash
                 && existing.initiated_by == initiator
                 && existing.admin_override == admin_override
+                && existing.reason_hash == reason_hash
             {
                 return Ok(());
             }
@@ -5340,6 +5447,7 @@ impl VaultRegistry {
             recorded_at: env.ledger().sequence(),
             admin_override,
             remaining_balance,
+            reason_hash,
         };
         env.storage().persistent().set(&refund_key, &refund);
         Self::bump_persistent(env, &refund_key);

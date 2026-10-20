@@ -5623,6 +5623,128 @@ exports[`tool schema snapshots > mindvault_wallet_info > output schema 1`] = `
 }
 `;
 
+exports[`tool schema snapshots > mindvault_contract_preflight > annotations 1`] = `
+{
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": true,
+  "title": "Contract Preflight",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_contract_preflight > input schema 1`] = `
+{
+  "properties": {},
+  "required": [],
+  "type": "object",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_contract_preflight > output schema 1`] = `
+{
+  "properties": {
+    "contractId": {
+      "type": "string",
+    },
+    "deployedNetworkId": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "deployedSchemaVersion": {
+      "type": [
+        "integer",
+        "null",
+      ],
+    },
+    "expectedNetworkId": {
+      "type": "string",
+    },
+    "issues": {
+      "items": {
+        "properties": {
+          "action": {
+            "type": "string",
+          },
+          "actual": {
+            "type": "string",
+          },
+          "expected": {
+            "type": "string",
+          },
+          "field": {
+            "enum": [
+              "contractId",
+              "registry",
+              "networkId",
+              "schemaVersion",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "field",
+          "expected",
+          "actual",
+          "action",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+    "message": {
+      "type": "string",
+    },
+    "network": {
+      "type": "string",
+    },
+    "ready": {
+      "type": "boolean",
+    },
+    "registryName": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "rpcUrl": {
+      "type": "string",
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "blocked",
+        "error",
+        "skipped",
+      ],
+      "type": "string",
+    },
+    "supportedSchemaVersions": {
+      "items": {
+        "type": "integer",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "status",
+    "ready",
+    "message",
+    "contractId",
+    "network",
+    "rpcUrl",
+    "expectedNetworkId",
+    "deployedNetworkId",
+    "registryName",
+    "deployedSchemaVersion",
+    "supportedSchemaVersions",
+    "issues",
+  ],
+  "type": "object",
+}
+`;
+
 exports[`tool schema snapshots > the covered tool names are pinned 1`] = `
 [
   "mindvault_accept_transfer",
@@ -5636,6 +5758,7 @@ exports[`tool schema snapshots > the covered tool names are pinned 1`] = `
   "mindvault_check_consistency",
   "mindvault_check_state_permissions",
   "mindvault_compare_catalogs",
+  "mindvault_contract_preflight",
   "mindvault_debug_bundle",
   "mindvault_export_receipts",
   "mindvault_fee_config",

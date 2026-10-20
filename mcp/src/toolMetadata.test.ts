@@ -35,6 +35,7 @@ const TOOL_SIDE_EFFECTS = {
   mindvault_register_onchain: "external-write",
   mindvault_agent_status: "none",
   mindvault_registry_info: "none",
+  mindvault_contract_preflight: "none",
   mindvault_terms: "external-write",
   mindvault_network_profile: "none",
   mindvault_check_bindings: "none",

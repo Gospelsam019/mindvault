@@ -1,4 +1,4 @@
-# MindVault Contracts (Soroban)
+﻿# MindVault Contracts (Soroban)
 
 Soroban smart contracts for MindVault. Today there is one:
 
@@ -339,8 +339,8 @@ See [`docs/adr-fee-config.md`](../docs/adr-fee-config.md) for the full design ra
 | `set_fee_destination(config)`                                                | `admin`                                                  | `config: FeeDestinationConfig` — `bps` share of the platform fee (0–10 000) and `destination` (`None`, `Burn`, or `Charity(address)`)                                                                                                                       | `Result<(), Error>`                    | Set or clear the burn/charity route without changing the base fee config. Emits `setdest`; the event records policy, not token movement.                                                                                                                                                         |
 | `get_fee_destination()`                                                      | —                                                        | —                                                                                                                                                                                                                                                    | `FeeDestinationConfig`                 | Fetch the current fee-destination policy, defaulting to `None` with zero bps.                                                                                                                                                                                                                              |
 | `preview_fee_split(amount)`                                                  | —                                                        | `amount: i128` — proposed sale amount / price in USDC stroops                                                                                                                                                                                        | `Result<FeeSplitPreview, Error>`       | Calculate exact integer platform, destination, recipient, royalty fees, and creator remainder for a price before payment recording. Validates amount bounds.                                                                                                               |
-| `preview_fee_split(amount)`                                                  | —                                                        | `amount: i128` — proposed sale amount / price in USDC stroops                                                                                                                                                                                        | `Result<FeeSplitPreview, Error>`        | Calculate exact integer platform, destination, recipient, royalty fees, and creator remainder for a price before payment recording. Validates amount bounds.                                                                                                            |
 | `repair_index(ids)`                                                          | `admin`                                                  | `ids: Vec<String>` — authoritative ordered id list                                                                                                                                                                                                   | `Result<(), Error>`                    | Rebuild the pagination index and `Count` from an admin-supplied id list. Rejects duplicates with `DuplicateInRepair`. Emits `reindex`.                                                                                                                                                                   |
+| `repair_index_chunk(ids, cursor)`                                            | `admin`                                                  | `ids: Vec<String>` — next slice of the authoritative list, ≤ `REPAIR_INDEX_CHUNK_CAP` (50); `cursor: u32` — catalog position to write at, ≤ current `Count`                                                                                          | `Result<u32, Error>`                   | Bounded, resumable rebuild for large registries: writes `ids` into `Index(cursor..)` and sets `Count` to `cursor + ids.len()`, returning the cursor for the next call. Interrupted repairs resume from the last returned cursor. Errors `BatchTooLarge` above the cap, `InvalidRepairCursor` past `Count`, `NotFound`, `DuplicateInRepair`. Emits `reindex` per chunk. |
 | `repair_tag_index(ids)`                                                      | `admin`                                                  | `ids: Vec<String>` — authoritative ordered id list                                                                                                                                                                                                   | `Result<(), Error>`                    | Rebuild tag indexes from registered resources. Emits `retagidx`.                                                                                                                                                                                                                                         |
 | `record_payment(settler, receipt_id, resource_id, payer, amount, tx_hash)`   | `settler` + `payer`                                      | `settler: Address` — holder of the settler role; `receipt_id: String` — unique, 1-64 bytes; `resource_id: String`; `payer: Address`; `amount: i128` — `> 0`; `tx_hash: String` — 1-128 bytes                                                         | `Result<(), Error>`                    | Record an x402/Soroban payment receipt in `Escrowed` state and index it under `(resource_id, payer)`. Emits `payment` and a `nomemo` provenance warning — prefer `record_payment_with_memo`.                                                                                                                                                                                   |
 | `record_payment_idempotent(settler, receipt_id, resource_id, payer, amount, tx_hash)` | `settler` + `payer`                                      | Same as `record_payment`; returns existing receipt if identical duplicate already exists.                                                                                                                                                           | `Result<PaymentReceipt, Error>`        | Idempotent payment recording. Returns stored receipt if arguments match existing record, otherwise writes new receipt. Emits `payment` on fresh write.                                                                                                                   |
@@ -414,7 +414,7 @@ transactions rather than contract-held escrow.
 
 Three roles sit alongside the per-resource `creator` and the pre-existing admin:
 
-- **admin** — set via `nominate_new_admin` (see above). Can grant/revoke or rotate the verifier role (`add_verifier`/`remove_verifier`/`rotate_verifier`), repair the pagination index (`repair_index`) or tag index (`repair_tag_index`), set the registry fee config (`set_fee_config`), configure refund windows, and record admin-override refunds. Cannot mutate any resource's price, metadata, listing, tags, or ownership.
+- **admin** — set via `nominate_new_admin` (see above). Can grant/revoke or rotate the verifier role (`add_verifier`/`remove_verifier`/`rotate_verifier`), repair the pagination index (`repair_index`, or `repair_index_chunk` for a bounded resumable rebuild) or tag index (`repair_tag_index`), set the registry fee config (`set_fee_config`), configure refund windows, and record admin-override refunds. Cannot mutate any resource's price, metadata, listing, tags, or ownership.
 - **verifier** — zero or more addresses granted by the admin. Can call `set_verification_status` and `anchor_purchase_receipt`. Cannot touch price, metadata, listing, tags, ownership, or the admin/verifier role list itself.
 
 ### Role management flows
@@ -636,7 +636,7 @@ if (page.next_cursor !== null) {
 | `20` | `InvalidVerificationTransition` | Verification status transition is not allowed (self-transition or revert to `Pending`). |
 | `21` | `AlreadyFrozen`                 | `freeze_metadata` was already called on this resource.                                  |
 | `22` | `MetadataFrozen`                | `update_metadata` rejected because the metadata pointer is frozen.                      |
-| `23` | `DuplicateInRepair`             | `repair_index` received a duplicate id in the supplied list.                            |
+| `23` | `DuplicateInRepair`             | `repair_index` or `repair_index_chunk` received a duplicate id in the supplied list.                            |
 | `24` | `InvalidTxHash`                 | A payment or refund `tx_hash` is empty or exceeds `MAX_TX_HASH_LEN` (128 bytes).         |
 | `25` | `InvalidPaymentAmount`          | A payment or refund `amount` is `<= 0`, or a refund window is outside its allowed bounds. |
 | `26` | `NotModerator`                  | Caller does not hold the moderator role.                                                |
@@ -671,15 +671,16 @@ if (page.next_cursor !== null) {
 
 #### Error budget
 
-This enum is **full**. The protocol caps a contract error enum at 50 cases
-(`ScSpecUdtErrorEnumV0.cases` is `VecM<_, 50>`), and codes `1`–`50` are all
-allocated, so `#[contracterror]` fails to compile with `LengthExceedsMax` on a
-`51` variant. Adding an error code therefore requires retiring an existing one
-first, and retiring a code is a breaking change for anything matching on it.
+An error enum embedded in a contract's exported spec is capped at 50 cases
+(`ScSpecUdtErrorEnumV0.cases` is `VecM<_, 50>`). This crate compiles its error
+enum with `#[contracterror(export = false)]`, which keeps the enum out of the
+embedded spec, so that XDR cap does not apply here — but retiring an allocated
+code is still a breaking change for anything matching on it, and every new
+variant grows the WASM.
 
-Plan new validation around an existing code where the semantics genuinely fit,
-or prefer a behavior that needs no new code (a documented no-op, or folding the
-case into a broader existing error) over growing the enum.
+Prefer planning new validation around an existing code where the semantics
+genuinely fit, or a behavior that needs no new code (a documented no-op, or
+folding the case into a broader existing error), over growing the enum.
 
 ### Resource ID format and reserved words
 
@@ -872,7 +873,8 @@ listing index the contract can prune in bounded gas:
 The catalog `Index`/`Count` pair is deliberately left alone: `Count` is
 monotonic by design, and locating a resource's slot in the insertion-ordered
 index would cost a scan proportional to the catalog size. Use `repair_index`
-if that pair ever needs rebuilding. Creator mutations to price, metadata, tags, or ownership fail with
+(or `repair_index_chunk` to split the rebuild into bounded, resumable
+transactions on large registries) if that pair ever needs rebuilding. Creator mutations to price, metadata, tags, or ownership fail with
 `ResourceNotMutable` in those states. All invalid state changes, including
 attempts to exit `Tombstoned` or to reactivate a `Disputed` resource before an
 admin resolution, fail with `InvalidLifecycleTransition`.
@@ -1127,6 +1129,12 @@ For feature detection, `resource_schema_version()` returns
 `resource_schema_version() >= N` without decoding `contract_version()` or
 `registry_info()`.
 
+The MindVault MCP's read-only `mindvault_contract_preflight` checks the
+configured contract ID against `registry_info()`, compares `network_id` with
+the configured network passphrase, and accepts only the Resource schema version
+supported by that MCP release. The MCP runs this check before publishing or
+submitting an on-chain registration; it does not modify contract state.
+
 ### Deployment network guard
 
 | Constant                   | Value                        | Description                                           |
@@ -1266,15 +1274,34 @@ has been set, or `Unauthorized` if the caller does not match the stored admin.
 #### Payment-scope pause
 
 `set_payments_paused(admin, true)` arms a second, independent pause that blocks
-only the value-moving write paths—payments, refunds, anchors, and lease
-purchases/settlements—while catalog management and all read-only methods stay
-available.
+payment, refund, anchor, and lease state writes while catalog management and all
+read-only methods stay available. The registry does not custody or transfer
+USDC; this pause rejects registry state transitions and cannot stop off-contract
+payment transfers.
 
-Methods blocked when payment-scope paused (return `Error::ContractPaused`):
-- payments: `record_payment`, `record_payment_idempotent`, `settle_payment`
-- refunds: `record_creator_refund`, `record_admin_refund`
-- anchors: `anchor_purchase_receipt`, `attempt_anchor_purchase_receipt`, `override_purchase_receipt_anchor`, `record_anchor_failure`, `retry_anchor_purchase_receipt`
-- leases: `buy_lease`, `record_lease`, `settle_lease`, `renew_lease`
+The write-path pause matrix is:
+
+| Method | Global pause | Payment-scope pause |
+| --- | --- | --- |
+| `record_payment` | Blocked | Blocked |
+| `record_payment_idempotent` | Blocked | Blocked |
+| `settle_payment` | Blocked | Blocked |
+| `record_creator_refund` | Blocked | Blocked |
+| `record_admin_refund` | Blocked | Blocked |
+| `anchor_purchase_receipt` | Blocked | Blocked |
+| `attempt_anchor_purchase_receipt` | Blocked | Blocked |
+| `override_purchase_receipt_anchor` | Blocked | Blocked |
+| `record_anchor_failure` | Blocked | Blocked |
+| `retry_anchor_purchase_receipt` | Blocked | Blocked |
+| `buy_lease` | Blocked | Blocked |
+| `record_lease` | Blocked | Blocked |
+| `settle_lease` | Blocked | Blocked |
+| `renew_lease` | Blocked | Blocked |
+| `revoke_lease` | Blocked | Blocked |
+
+Each rejected call returns `Error::ContractPaused` without changing contract
+state. This matrix is exercised by
+[`payment_pause_matrix.rs`](./contracts/vault-registry/src/test/payment_pause_matrix.rs).
 
 The global pause remains broader (blocks all writes). `is_payments_paused()` is
 independent of `is_paused()`. `set_payments_paused` requires the current admin,
