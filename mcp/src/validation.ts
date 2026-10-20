@@ -120,6 +120,14 @@ const ON_CHAIN_RESOURCE_ID: ArgumentSpec = {
   patternHint: "1–24 lowercase letters or digits",
 };
 
+/** Client-chosen key that ties a mindvault_buy attempt to a later status lookup. */
+const IDEMPOTENCY_KEY: ArgumentSpec = {
+  kind: "string",
+  maxLength: 128,
+  pattern: /^[A-Za-z0-9._:-]+$/,
+  patternHint: "letters, digits, dot, dash, underscore, or colon (max 128 chars)",
+};
+
 /** Same rules as profiles.isValidProfileName, expressed as a spec. */
 const PROFILE_NAME: ArgumentSpec = {
   kind: "string",
@@ -257,7 +265,10 @@ export const TOOL_ARGUMENT_SPECS: Record<string, ToolArgumentSpec> = {
     network: { kind: "enum", values: ["testnet", "mainnet"], required: true },
   },
   mindvault_list_profiles: {},
-  mindvault_browse: { ...CATALOG_FILTER_ARGS },
+  mindvault_browse: { ...CATALOG_FILTER_ARGS, bypassCache: { kind: "flag" } },
+  mindvault_search: { ...CATALOG_FILTER_ARGS, bypassCache: { kind: "flag" } },
+  mindvault_preview: { resourceId: RESOURCE_ID, bypassCache: { kind: "flag" } },
+  mindvault_browse: { ...CATALOG_FILTER_ARGS, cursor: { kind: "string", maxLength: 512 } },
   mindvault_search: { ...CATALOG_FILTER_ARGS },
   mindvault_preview: { resourceId: RESOURCE_ID },
   mindvault_register: {
@@ -305,6 +316,10 @@ export const TOOL_ARGUMENT_SPECS: Record<string, ToolArgumentSpec> = {
       max: MAX_SETTLEMENT_TIMEOUT_MS,
     },
     intervalMs: { kind: "integer", min: MIN_SETTLEMENT_INTERVAL_MS },
+    idempotencyKey: IDEMPOTENCY_KEY,
+  },
+  mindvault_purchase_status: {
+    idempotencyKey: { ...IDEMPOTENCY_KEY, required: true },
   },
   mindvault_export_receipts: {
     format: { kind: "enum", values: ["json", "csv", "ndjson"] },
@@ -334,6 +349,7 @@ export const TOOL_ARGUMENT_SPECS: Record<string, ToolArgumentSpec> = {
   },
   mindvault_agent_status: {},
   mindvault_registry_info: {},
+  mindvault_contract_preflight: {},
   mindvault_terms: {
     operation: { kind: "enum", required: true, values: ["get", "set"] },
     creator: STELLAR_ADDRESS,
@@ -358,6 +374,11 @@ export const TOOL_ARGUMENT_SPECS: Record<string, ToolArgumentSpec> = {
   mindvault_registry_count: {
     creator: { kind: "string" },
   },
+  mindvault_compare_catalogs: {
+    left: { kind: "enum", values: ["testnet", "mainnet"], required: true },
+    right: { kind: "enum", values: ["testnet", "mainnet"], required: true },
+    limit: { kind: "integer", min: 1, max: 100 },
+  },
   mindvault_tx_status: { txHash: { kind: "hash", required: true, bareHex: true } },
   // `confirm` is what resetGuard.isResetConfirmed reads. It was advertised in
   // ListTools and absent here, so every confirmed reset failed validation as an
@@ -378,6 +399,16 @@ export const TOOL_ARGUMENT_SPECS: Record<string, ToolArgumentSpec> = {
   mindvault_debug_bundle: {
     auditLogLines: { kind: "integer", min: 0, max: DEBUG_BUNDLE_MAX_AUDIT_LINES },
     includeEnvironment: { kind: "flag" },
+  },
+  mindvault_support_bundle: {
+    incidentId: {
+      kind: "string",
+      required: true,
+      maxLength: 64,
+      pattern: /^mv-[0-9a-z]+-[0-9a-z]{4}$/,
+      patternHint: "a correlation ID such as mv-lx3k9a2-4f7q",
+    },
+    maxEntries: { kind: "integer", min: 1, max: 200 },
   },
   mindvault_set_tags: {
     resourceId: RESOURCE_ID,

@@ -187,6 +187,18 @@ exports[`tool schema snapshots > mindvault_browse > annotations 1`] = `
 exports[`tool schema snapshots > mindvault_browse > input schema 1`] = `
 {
   "properties": {
+    "bypassCache": {
+      "description": "Set true to force a fresh read from the live API for this call only. A failed live read returns an error instead of an offline snapshot. Defaults to false (or MINDVAULT_CATALOG_CACHE_BYPASS).",
+      "examples": [
+        true,
+        false,
+      ],
+      "type": "boolean",
+    "cursor": {
+      "description": "Opaque cursor returned as nextCursor by a previous mindvault_browse page. Resumes at the next page without re-fetching earlier ones. Must be sent with the same filters; a mismatched or expired cursor is rejected, so restart without a cursor. Do not combine with offset.",
+      "maxLength": 512,
+      "type": "string",
+    },
     "limit": {
       "description": "Max number of resources to return (1–100, server default 20).",
       "examples": [
@@ -402,6 +414,13 @@ exports[`tool schema snapshots > mindvault_buy > input schema 1`] = `
     "dryRun": {
       "description": "Optional dry-run flag. When true, validates the resource ID and shows intended network, endpoint, and required wallet state without submitting payment.",
       "type": "boolean",
+    },
+    "idempotencyKey": {
+      "description": "Optional client-chosen key (letters, digits, dot, dash, underscore, colon; max 128). When set, the attempt is recorded so mindvault_purchase_status can resolve it if the response is lost. A key that already settled is not paid again.",
+      "examples": [
+        "buy-cm7x8y9z-2026-01-01",
+      ],
+      "type": "string",
     },
     "intervalMs": {
       "default": 2000,
@@ -934,6 +953,175 @@ exports[`tool schema snapshots > mindvault_check_state_permissions > input schem
 `;
 
 exports[`tool schema snapshots > mindvault_check_state_permissions > output schema 1`] = `null`;
+
+exports[`tool schema snapshots > mindvault_compare_catalogs > annotations 1`] = `
+{
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": true,
+  "title": "Compare Catalogs",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_compare_catalogs > input schema 1`] = `
+{
+  "properties": {
+    "left": {
+      "description": "First profile to compare: testnet or mainnet.",
+      "enum": [
+        "testnet",
+        "mainnet",
+      ],
+      "examples": [
+        "testnet",
+      ],
+      "type": "string",
+    },
+    "limit": {
+      "description": "Max resources read from each profile (1-100, default 100).",
+      "examples": [
+        50,
+      ],
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer",
+    },
+    "right": {
+      "description": "Second profile to compare; must differ from left.",
+      "enum": [
+        "testnet",
+        "mainnet",
+      ],
+      "examples": [
+        "mainnet",
+      ],
+      "type": "string",
+    },
+  },
+  "required": [
+    "left",
+    "right",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_compare_catalogs > output schema 1`] = `
+{
+  "properties": {
+    "differing": {
+      "items": {
+        "properties": {
+          "fields": {
+            "type": "object",
+          },
+          "id": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+          "fields",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+    "identicalCount": {
+      "type": "integer",
+    },
+    "left": {
+      "properties": {
+        "apiUrl": {
+          "type": "string",
+        },
+        "count": {
+          "type": "integer",
+        },
+        "network": {
+          "type": "string",
+        },
+        "registryContractId": {
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "x402Network": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "network",
+        "x402Network",
+        "apiUrl",
+        "registryContractId",
+        "count",
+      ],
+      "type": "object",
+    },
+    "onlyInLeft": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "onlyInRight": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "right": {
+      "properties": {
+        "apiUrl": {
+          "type": "string",
+        },
+        "count": {
+          "type": "integer",
+        },
+        "network": {
+          "type": "string",
+        },
+        "registryContractId": {
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "x402Network": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "network",
+        "x402Network",
+        "apiUrl",
+        "registryContractId",
+        "count",
+      ],
+      "type": "object",
+    },
+    "summary": {
+      "type": "string",
+    },
+    "truncated": {
+      "type": "boolean",
+    },
+  },
+  "required": [
+    "left",
+    "right",
+    "onlyInLeft",
+    "onlyInRight",
+    "differing",
+    "identicalCount",
+    "truncated",
+    "summary",
+  ],
+  "type": "object",
+}
+`;
 
 exports[`tool schema snapshots > mindvault_debug_bundle > annotations 1`] = `
 {
@@ -2160,6 +2348,14 @@ exports[`tool schema snapshots > mindvault_preview > annotations 1`] = `
 exports[`tool schema snapshots > mindvault_preview > input schema 1`] = `
 {
   "properties": {
+    "bypassCache": {
+      "description": "Set true to force a fresh read from the live API for this call only. A failed live read returns an error instead of an offline snapshot. Defaults to false (or MINDVAULT_CATALOG_CACHE_BYPASS).",
+      "examples": [
+        true,
+        false,
+      ],
+      "type": "boolean",
+    },
     "resourceId": {
       "description": "The unique resource identifier from mindvault_browse or mindvault_search. Example: 'cm7x8y9z'",
       "examples": [
@@ -2942,6 +3138,94 @@ exports[`tool schema snapshots > mindvault_purchase_history > output schema 1`] 
   "required": [
     "count",
     "purchases",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_purchase_status > annotations 1`] = `
+{
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": true,
+  "title": "Purchase Status",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_purchase_status > input schema 1`] = `
+{
+  "properties": {
+    "idempotencyKey": {
+      "description": "The idempotencyKey that was passed to mindvault_buy.",
+      "examples": [
+        "buy-cm7x8y9z-2026-01-01",
+      ],
+      "type": "string",
+    },
+  },
+  "required": [
+    "idempotencyKey",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_purchase_status > output schema 1`] = `
+{
+  "properties": {
+    "idempotencyKey": {
+      "type": "string",
+    },
+    "message": {
+      "type": "string",
+    },
+    "next": {
+      "type": "string",
+    },
+    "receiptRef": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "resourceId": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "startedAt": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "state": {
+      "enum": [
+        "unknown",
+        "pending",
+        "settled",
+        "failed",
+      ],
+      "type": "string",
+    },
+    "txHash": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "updatedAt": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+  },
+  "required": [
+    "idempotencyKey",
+    "state",
+    "message",
   ],
   "type": "object",
 }
@@ -3773,6 +4057,14 @@ exports[`tool schema snapshots > mindvault_search > annotations 1`] = `
 exports[`tool schema snapshots > mindvault_search > input schema 1`] = `
 {
   "properties": {
+    "bypassCache": {
+      "description": "Set true to force a fresh read from the live API for this call only. A failed live read returns an error instead of an offline snapshot. Defaults to false (or MINDVAULT_CATALOG_CACHE_BYPASS).",
+      "examples": [
+        true,
+        false,
+      ],
+      "type": "boolean",
+    },
     "limit": {
       "description": "Max number of resources to return (1–100, server default 20).",
       "examples": [
@@ -4447,6 +4739,45 @@ exports[`tool schema snapshots > mindvault_setup_wallet > output schema 1`] = `
   "type": "object",
 }
 `;
+
+exports[`tool schema snapshots > mindvault_support_bundle > annotations 1`] = `
+{
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": true,
+  "title": "Export Support Bundle",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_support_bundle > input schema 1`] = `
+{
+  "properties": {
+    "incidentId": {
+      "description": "Correlation ID of the incident, as reported by the failing tool call. Example: 'mv-lx3k9a2-4f7q'.",
+      "examples": [
+        "mv-lx3k9a2-4f7q",
+      ],
+      "type": "string",
+    },
+    "maxEntries": {
+      "description": "Maximum audit-log entries to include (1–200, default 100). Newest are kept.",
+      "examples": [
+        50,
+        200,
+      ],
+      "maximum": 200,
+      "minimum": 1,
+      "type": "integer",
+    },
+  },
+  "required": [
+    "incidentId",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_support_bundle > output schema 1`] = `null`;
 
 exports[`tool schema snapshots > mindvault_switch_network_profile > annotations 1`] = `
 {
@@ -5292,6 +5623,128 @@ exports[`tool schema snapshots > mindvault_wallet_info > output schema 1`] = `
 }
 `;
 
+exports[`tool schema snapshots > mindvault_contract_preflight > annotations 1`] = `
+{
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": true,
+  "title": "Contract Preflight",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_contract_preflight > input schema 1`] = `
+{
+  "properties": {},
+  "required": [],
+  "type": "object",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_contract_preflight > output schema 1`] = `
+{
+  "properties": {
+    "contractId": {
+      "type": "string",
+    },
+    "deployedNetworkId": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "deployedSchemaVersion": {
+      "type": [
+        "integer",
+        "null",
+      ],
+    },
+    "expectedNetworkId": {
+      "type": "string",
+    },
+    "issues": {
+      "items": {
+        "properties": {
+          "action": {
+            "type": "string",
+          },
+          "actual": {
+            "type": "string",
+          },
+          "expected": {
+            "type": "string",
+          },
+          "field": {
+            "enum": [
+              "contractId",
+              "registry",
+              "networkId",
+              "schemaVersion",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "field",
+          "expected",
+          "actual",
+          "action",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+    "message": {
+      "type": "string",
+    },
+    "network": {
+      "type": "string",
+    },
+    "ready": {
+      "type": "boolean",
+    },
+    "registryName": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "rpcUrl": {
+      "type": "string",
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "blocked",
+        "error",
+        "skipped",
+      ],
+      "type": "string",
+    },
+    "supportedSchemaVersions": {
+      "items": {
+        "type": "integer",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "status",
+    "ready",
+    "message",
+    "contractId",
+    "network",
+    "rpcUrl",
+    "expectedNetworkId",
+    "deployedNetworkId",
+    "registryName",
+    "deployedSchemaVersion",
+    "supportedSchemaVersions",
+    "issues",
+  ],
+  "type": "object",
+}
+`;
+
 exports[`tool schema snapshots > the covered tool names are pinned 1`] = `
 [
   "mindvault_accept_transfer",
@@ -5304,6 +5757,8 @@ exports[`tool schema snapshots > the covered tool names are pinned 1`] = `
   "mindvault_check_bindings",
   "mindvault_check_consistency",
   "mindvault_check_state_permissions",
+  "mindvault_compare_catalogs",
+  "mindvault_contract_preflight",
   "mindvault_debug_bundle",
   "mindvault_export_receipts",
   "mindvault_fee_config",
@@ -5322,6 +5777,7 @@ exports[`tool schema snapshots > the covered tool names are pinned 1`] = `
   "mindvault_publish_status",
   "mindvault_publish_template",
   "mindvault_purchase_history",
+  "mindvault_purchase_status",
   "mindvault_recover_catalog_cache",
   "mindvault_register",
   "mindvault_register_onchain",
@@ -5343,6 +5799,7 @@ exports[`tool schema snapshots > the covered tool names are pinned 1`] = `
   "mindvault_set_price",
   "mindvault_set_tags",
   "mindvault_setup_wallet",
+  "mindvault_support_bundle",
   "mindvault_switch_network_profile",
   "mindvault_transfer_ownership",
   "mindvault_tx_status",

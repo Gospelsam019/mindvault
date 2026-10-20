@@ -4,6 +4,8 @@
  * and adds tags + listed for client-side parity with on-chain / meta fields.
  */
 
+import { normalizeSearchTerm } from "./catalogSearchTerm.js";
+
 export const CATALOG_SORT_VALUES = ["newest", "price_asc", "price_desc", "title"] as const;
 export type CatalogSort = (typeof CATALOG_SORT_VALUES)[number];
 
@@ -26,6 +28,8 @@ export interface CatalogFilters {
   tags?: string[];
   /** Listing state; matched client-side when present on results. */
   listed?: boolean;
+  /** Opaque resume token from a previous browse page (see catalogCursor.ts). */
+  cursor?: string;
 }
 
 export type ParseCatalogFiltersResult =
@@ -193,6 +197,9 @@ export function parseCatalogFilters(
     offset,
     tags,
     listed,
+    ...(typeof raw.cursor === "string" && raw.cursor.trim()
+      ? { cursor: raw.cursor.trim() }
+      : {}),
   };
 
   if (options.requireCriteria) {
@@ -271,13 +278,13 @@ export function applyClientCatalogFilters<T extends Record<string, unknown>>(
   items: T[],
   filters: CatalogFilters,
 ): T[] {
-  const q = filters.query?.toLowerCase();
+  const q = filters.query ? normalizeSearchTerm(filters.query) : undefined;
   const wantedTags = filters.tags?.map((t) => t.toLowerCase()) ?? [];
   const skippedOnly = filters.verificationStatus === "skipped";
 
   return items.filter((r) => {
     if (q) {
-      const hay = `${r.title ?? ""} ${r.description ?? ""}`.toLowerCase();
+      const hay = normalizeSearchTerm(`${r.title ?? ""} ${r.description ?? ""}`);
       if (!hay.includes(q)) return false;
     }
     if (skippedOnly && r.verificationStatus !== "skipped") return false;

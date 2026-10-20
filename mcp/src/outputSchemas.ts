@@ -499,6 +499,50 @@ export const REGISTRY_INFO_OUTPUT_SCHEMA = {
   ],
 } as const;
 
+export const CONTRACT_PREFLIGHT_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    status: { type: "string", enum: ["ready", "blocked", "error", "skipped"] },
+    ready: { type: "boolean" },
+    message: { type: "string" },
+    contractId: { type: "string" },
+    network: { type: "string" },
+    rpcUrl: { type: "string" },
+    expectedNetworkId: { type: "string" },
+    deployedNetworkId: { type: ["string", "null"] },
+    registryName: { type: ["string", "null"] },
+    deployedSchemaVersion: { type: ["integer", "null"] },
+    supportedSchemaVersions: { type: "array", items: { type: "integer" } },
+    issues: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          field: { type: "string", enum: ["contractId", "registry", "networkId", "schemaVersion"] },
+          expected: { type: "string" },
+          actual: { type: "string" },
+          action: { type: "string" },
+        },
+        required: ["field", "expected", "actual", "action"],
+      },
+    },
+  },
+  required: [
+    "status",
+    "ready",
+    "message",
+    "contractId",
+    "network",
+    "rpcUrl",
+    "expectedNetworkId",
+    "deployedNetworkId",
+    "registryName",
+    "deployedSchemaVersion",
+    "supportedSchemaVersions",
+    "issues",
+  ],
+} as const;
+
 export const NETWORK_PROFILE_OUTPUT_SCHEMA = {
   type: "object",
   properties: {

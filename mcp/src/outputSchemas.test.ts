@@ -13,6 +13,7 @@ import {
   PURCHASE_HISTORY_OUTPUT_SCHEMA,
   RECOVER_CACHE_OUTPUT_SCHEMA,
   REGISTRY_INFO_OUTPUT_SCHEMA,
+  CONTRACT_PREFLIGHT_OUTPUT_SCHEMA,
   REGISTRY_LOOKUP_OUTPUT_SCHEMA,
   TEXT_ONLY_TOOLS,
   TEXT_RESULT_SCHEMA,
@@ -21,6 +22,7 @@ import {
   WALLET_SETUP_OUTPUT_SCHEMA,
 } from "./outputSchemas.js";
 import { TOOL_DEFINITIONS } from "./tools.js";
+import { outputValidationErrors } from "./toolResult.js";
 
 function requiredKeys(schema: { required?: readonly string[] }): readonly string[] {
   return schema.required ?? [];
@@ -50,6 +52,15 @@ describe("structured tools advertise a schema", () => {
     expect(structured.length).toBeGreaterThan(10);
     for (const tool of structured) {
       expect(tool.outputSchema, `${tool.name} should advertise outputSchema`).toBeDefined();
+    }
+  });
+
+  it("all advertised output schemas are compilable by the runtime validator", () => {
+    for (const tool of TOOL_DEFINITIONS) {
+      if (!tool.outputSchema) continue;
+      expect(outputValidationErrors(tool.outputSchema, {}), `${tool.name} schema`).not.toContain(
+        "schema compilation failed",
+      );
     }
   });
 
@@ -156,6 +167,20 @@ describe("representative payloads match advertised required keys", () => {
       x402Network: "stellar:testnet",
       resourceFields: ["id"],
       mainnetDiagnostics: "",
+    });
+    assertKeys(CONTRACT_PREFLIGHT_OUTPUT_SCHEMA, {
+      status: "ready",
+      ready: true,
+      message: "compatible",
+      contractId: "C…",
+      network: "testnet",
+      rpcUrl: "https://rpc",
+      expectedNetworkId: "abc",
+      deployedNetworkId: "abc",
+      registryName: "mindvault-vault-registry",
+      deployedSchemaVersion: 6,
+      supportedSchemaVersions: [6],
+      issues: [],
     });
     assertKeys(RECOVER_CACHE_OUTPUT_SCHEMA, {
       source: "mcp",
