@@ -5,7 +5,8 @@ use alloc::{format, string::ToString};
 use proptest::prelude::*;
 use soroban_sdk::{
     testutils::{
-        storage::Persistent as _, Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke,
+        storage::{Instance as _, Persistent as _}, Address as _, Events as _, Ledger as _,
+        MockAuth, MockAuthInvoke,
     },
     Address, BytesN, Env, IntoVal, String, Symbol, TryFromVal, TryIntoVal, Val, Vec,
 };
@@ -11523,4 +11524,5 @@ include!("test/cursor_paging.rs");
 include!("test/payment_listing.rs");
 include!("test/anchor_backoff.rs");
 include!("test/fee_rounding_proptest.rs");
+include!("test/storage_ttl_mutations.rs");
 include!("test/payment_pause_matrix.rs");
