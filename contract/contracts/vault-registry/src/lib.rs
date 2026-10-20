@@ -3494,8 +3494,10 @@ impl VaultRegistry {
         Self::require_not_paused(&env)?;
 
         let len = ids.len();
+        // Issue #116: Validate the entire bounded input before writing any index state
         for i in 0..len {
             let id = ids.get(i).unwrap();
+            Self::validate_resource_id(&id)?;
             if !env
                 .storage()
                 .persistent()
