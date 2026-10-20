@@ -256,6 +256,11 @@ MIT
 
 ## Handsoff notes
 
+<!-- handsoff-issue-3 -->
+- #3: [MCP] [Bug] paymentCeiling applies to buy but not to register_onchain / metadata mutations
+
+<!-- handsoff-issue-6 -->
+- #6: [MCP] [Bug] toolTimeoutOverrides applies to publish but not to export_receipts on huge histories
 <!-- handsoff-issue-19 -->
 - #19: [Contract] [Bug] Keep creator listed counts consistent across pause and lifecycle transitions
 
