@@ -18,6 +18,13 @@ Administrators can update registry-wide fee configurations via:
 - `set_fee_recipient`: Modifying the platform fee recipient address.
 - `set_fee_destination`: Configuring fee routing to `Burn` or `Charity(address)`.
 
+Resource creators can disable future royalty routing with
+`set_royalties_disabled(resource_id, true)`. The setting is creator-authorized,
+defaults to false for existing resources, and is exposed by
+`royalties_disabled`. `preview_fee_split_for_resource` applies the flag to the
+royalty component while leaving platform and destination fees unchanged; the
+existing `preview_fee_split(amount)` keeps its registry-wide behavior.
+
 ### Core Rule
 
 **Existing active leases retain their original price terms and access rights regardless of subsequent global fee configuration updates.**
