@@ -57,6 +57,7 @@ import {
   USE_PROFILE_OUTPUT_SCHEMA,
   WALLET_BALANCES_OUTPUT_SCHEMA,
   WALLET_INFO_OUTPUT_SCHEMA,
+  WALLET_IMPORT_OUTPUT_SCHEMA,
   WALLET_SETUP_OUTPUT_SCHEMA,
 } from "./outputSchemas.js";
 import { PURCHASE_STATUS_OUTPUT_SCHEMA } from "./purchaseStatusLookup.js";
@@ -1529,7 +1530,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "mindvault_import_wallet",
     description:
-      "Import an existing Stellar wallet by providing a secret key (or reading MINDVAULT_AGENT_SECRET from the environment). Validates the key, optionally persists it to the active profile (or a named profile), and never logs the secret. Use this to restore a wallet from backup or connect to an existing identity.",
+      "Verify an imported Stellar wallet first, then persist it only after confirming its derived public address, profile, and configured network. The secret is never returned or included in errors.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1541,13 +1542,22 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         },
         profile: {
           type: "string",
-          description: "Optional profile name to import into. Defaults to the active profile.",
+          description: "Profile name to import into. Required when persist is true.",
           examples: ["testnet", "mainnet-publisher"],
+        },
+        network: {
+          type: "string",
+          enum: ["testnet", "mainnet"],
+          description: "Stellar network to bind to the profile. Must match the configured network to persist.",
+        },
+        confirmAddress: {
+          type: "string",
+          description: "Exact public address returned by the verification call; required to persist.",
         },
         persist: {
           type: "boolean",
           description:
-            "When true (default), save the imported wallet to the state file. When false, validate only and return the public key without writing to disk.",
+            "When true, save only after profile, network, and confirmAddress are explicitly supplied. Defaults to false for a verification-only preview.",
           examples: [true, false],
         },
         confirmMainnet: {
@@ -1558,7 +1568,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
       required: [],
     },
-    outputSchema: WALLET_SETUP_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
+    outputSchema: WALLET_IMPORT_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
     annotations: {
       title: "Import Wallet",
       readOnlyHint: false,

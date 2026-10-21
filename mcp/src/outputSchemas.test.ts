@@ -19,6 +19,7 @@ import {
   TEXT_RESULT_SCHEMA,
   USE_PROFILE_OUTPUT_SCHEMA,
   WALLET_INFO_OUTPUT_SCHEMA,
+  WALLET_IMPORT_OUTPUT_SCHEMA,
   WALLET_SETUP_OUTPUT_SCHEMA,
 } from "./outputSchemas.js";
 import { TOOL_DEFINITIONS } from "./tools.js";
@@ -120,6 +121,15 @@ describe("representative payloads match advertised required keys", () => {
       publisherRegistered: null,
     });
     assertKeys(LIST_PROFILES_OUTPUT_SCHEMA, { active: "testnet", profiles: [] });
+  });
+
+  it("wallet import returns the explicit network binding", () => {
+    assertKeys(WALLET_IMPORT_OUTPUT_SCHEMA, {
+      profile: "buyer",
+      address: "GABCDEF",
+      network: "testnet",
+      persisted: false,
+    });
   });
 
   it("dry-run publish/buy match the mutation oneOf", () => {

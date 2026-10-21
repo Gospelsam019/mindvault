@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 const getAttestationHashMock = vi.hoisted(() => vi.fn());
 
@@ -86,6 +89,8 @@ import {
   _clearCatalogCache,
 } from "./catalogCache.js";
 import { Keypair } from "@stellar/stellar-sdk";
+import { _setPurchasesFilePath } from "./purchaseHistory.js";
+import { trackPurchaseAttempt } from "./purchaseStatusLookup.js";
 
 function mockResponse(data: unknown, ok = true, status = 200): Response {
   const body = JSON.stringify(data);
@@ -1082,6 +1087,66 @@ describe("buy – happy path (402 → sign → retry → success)", () => {
   it("throws when no wallet is configured", async () => {
     _setAgentWallet(null);
     await expect(buy("res-001")).rejects.toThrow("No wallet");
+  });
+});
+
+describe("wallet balances spend summary", () => {
+  it("labels the active-network USDC balance, pending estimate, and configured ceiling", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mindvault-wallet-summary-"));
+    _setPurchasesFilePath(join(dir, "purchases.json"));
+    _resetProfiles();
+    try {
+      const result = await dispatchTool("mindvault_wallet_balances", {});
+      expect(result).toContain("Spend summary (default,");
+      expect(result).toContain("USDC): balance unavailable; estimated pending spend 0;");
+      expect(result).toContain("automatic payment ceiling 10.");
+    } finally {
+      _resetProfiles();
+      _setPurchasesFilePath(null);
+      rmSync(dir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("estimates pending spend from current listing prices", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mindvault-wallet-pending-"));
+    _setPurchasesFilePath(join(dir, "purchases.json"));
+    _resetProfiles();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(mockResponse({ price: "3.25" }));
+    try {
+      await expect(
+        trackPurchaseAttempt("default", "pending-key", "res-pending", false, async () => {
+          throw Object.assign(new Error("Request timed out"), { name: "TimeoutError" });
+        }),
+      ).rejects.toThrow();
+
+      const result = await dispatchTool("mindvault_wallet_balances", {});
+      expect(result).toContain("estimated pending spend 3.25");
+      expect(result).toContain("1/1 purchase attempts priced");
+    } finally {
+      _resetProfiles();
+      _setPurchasesFilePath(null);
+      rmSync(dir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+});
+
+describe("Stellar argument validation", () => {
+  it("rejects an invalid address checksum before any API request", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    try {
+      await expect(
+        dispatchTool("mindvault_register", {
+          name: "Agent",
+          email: "agent@example.com",
+          walletAddress: `G${"A".repeat(55)}`,
+        }),
+      ).rejects.toThrow("walletAddress is not a valid Stellar public address");
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });
 
