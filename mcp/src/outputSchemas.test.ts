@@ -13,11 +13,13 @@ import {
   PURCHASE_HISTORY_OUTPUT_SCHEMA,
   RECOVER_CACHE_OUTPUT_SCHEMA,
   REGISTRY_INFO_OUTPUT_SCHEMA,
+  CONTRACT_PREFLIGHT_OUTPUT_SCHEMA,
   REGISTRY_LOOKUP_OUTPUT_SCHEMA,
   TEXT_ONLY_TOOLS,
   TEXT_RESULT_SCHEMA,
   USE_PROFILE_OUTPUT_SCHEMA,
   WALLET_INFO_OUTPUT_SCHEMA,
+  WALLET_IMPORT_OUTPUT_SCHEMA,
   WALLET_SETUP_OUTPUT_SCHEMA,
 } from "./outputSchemas.js";
 import { TOOL_DEFINITIONS } from "./tools.js";
@@ -121,6 +123,15 @@ describe("representative payloads match advertised required keys", () => {
     assertKeys(LIST_PROFILES_OUTPUT_SCHEMA, { active: "testnet", profiles: [] });
   });
 
+  it("wallet import returns the explicit network binding", () => {
+    assertKeys(WALLET_IMPORT_OUTPUT_SCHEMA, {
+      profile: "buyer",
+      address: "GABCDEF",
+      network: "testnet",
+      persisted: false,
+    });
+  });
+
   it("dry-run publish/buy match the mutation oneOf", () => {
     const publish = dryRunPublish(
       { title: "T", price: "5.00", externalUrl: "https://example.com" },
@@ -166,6 +177,20 @@ describe("representative payloads match advertised required keys", () => {
       x402Network: "stellar:testnet",
       resourceFields: ["id"],
       mainnetDiagnostics: "",
+    });
+    assertKeys(CONTRACT_PREFLIGHT_OUTPUT_SCHEMA, {
+      status: "ready",
+      ready: true,
+      message: "compatible",
+      contractId: "C…",
+      network: "testnet",
+      rpcUrl: "https://rpc",
+      expectedNetworkId: "abc",
+      deployedNetworkId: "abc",
+      registryName: "mindvault-vault-registry",
+      deployedSchemaVersion: 6,
+      supportedSchemaVersions: [6],
+      issues: [],
     });
     assertKeys(RECOVER_CACHE_OUTPUT_SCHEMA, {
       source: "mcp",

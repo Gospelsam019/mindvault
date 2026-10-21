@@ -38,6 +38,43 @@ fn fee_split_preview_defaults_when_unconfigured() {
 }
 
 #[test]
+fn resource_royalty_opt_out_defaults_off_and_changes_only_royalty_routing() {
+    let (env, creator, admin, client) = setup_with_admin();
+    let id = String::from_str(&env, "royaltyoff");
+    client.register(
+        &creator,
+        &id,
+        &100_000i128,
+        &String::from_str(&env, "ipfs://royalty"),
+        &empty_tags(&env),
+    );
+    client.set_fee_config(&FeeConfig {
+        platform_fee_bps: 1_000,
+        royalty_bps: 500,
+        fee_recipient: Some(admin),
+    });
+
+    assert!(!client.royalties_disabled(&id));
+    let before = client.preview_fee_split_for_resource(&id, &100_000i128);
+    assert_eq!(before.platform_fee, 10_000i128);
+    assert_eq!(before.royalty_fee, 5_000i128);
+
+    client.set_royalties_disabled(&id, &true);
+    assert!(client.royalties_disabled(&id));
+    let after = client.preview_fee_split_for_resource(&id, &100_000i128);
+    assert_eq!(after.platform_fee, before.platform_fee);
+    assert_eq!(after.royalty_fee, 0i128);
+    assert_eq!(after.creator_remainder, before.creator_remainder + before.royalty_fee);
+
+    let events = env.events().all();
+    let (_contract, topics, data) = events.last().unwrap();
+    let topic: Symbol = Symbol::try_from_val(&env, &topics.get(0).unwrap()).unwrap();
+    assert_eq!(topic, symbol_short!("setroyoff"));
+    let (old, new): (bool, bool) = data.try_into_val(&env).unwrap();
+    assert_eq!((old, new), (false, true));
+}
+
+#[test]
 fn fee_split_preview_with_destination_none() {
     let (_env, _creator, admin, client) = setup_with_admin();
     client.set_fee_config(&FeeConfig {

@@ -261,6 +261,18 @@ MIT
 
 <!-- handsoff-issue-125 -->
 - #125: [MCP] [Feature] Add export format option for receipt history
+<!-- handsoff-issue-25 -->
+- #25: [Contract] [Bug] Prevent expired pause deadlines from reactivating after timestamp rollback
+<!-- handsoff-issue-3 -->
+- #3: [MCP] [Bug] paymentCeiling applies to buy but not to register_onchain / metadata mutations
+
+<!-- handsoff-issue-6 -->
+- #6: [MCP] [Bug] toolTimeoutOverrides applies to publish but not to export_receipts on huge histories
+<!-- handsoff-issue-19 -->
+- #19: [Contract] [Bug] Keep creator listed counts consistent across pause and lifecycle transitions
+
+<!-- handsoff-issue-20 -->
+- #20: [Contract] [Feature] Add bounded resource search by normalized tag prefix
 <!-- handsoff-issue-11 -->
 - #11: [Contract] [Bug] Make cursor pagination stable when resources are tombstoned
 
@@ -282,3 +294,6 @@ MIT
 
 <!-- handsoff-issue-18 -->
 - #18: [Contract] [Feature] Add creator-scoped listing page with listed and lifecycle filters
+
+<!-- handsoff-issue-42 -->
+- #42: [Contract] [Bug] Enforce bounded retry windows for anchor recovery paths
