@@ -289,3 +289,6 @@ MIT
 
 <!-- handsoff-issue-18 -->
 - #18: [Contract] [Feature] Add creator-scoped listing page with listed and lifecycle filters
+
+<!-- handsoff-issue-42 -->
+- #42: [Contract] [Bug] Enforce bounded retry windows for anchor recovery paths
