@@ -31,6 +31,15 @@ pub struct FeeSplitPreview {
 /// Calculate the exact integer fee split for a proposed sale amount according to
 /// the active registry FeeConfig and FeeDestination.
 pub(crate) fn compute(env: &Env, amount: i128) -> Result<FeeSplitPreview, Error> {
+    compute_with_royalty(env, amount, true)
+}
+
+/// Calculate a fee split, optionally suppressing the configured royalty.
+pub(crate) fn compute_with_royalty(
+    env: &Env,
+    amount: i128,
+    include_royalty: bool,
+) -> Result<FeeSplitPreview, Error> {
     if amount <= 0 {
         return Err(Error::InvalidPrice);
     }
@@ -56,9 +65,13 @@ pub(crate) fn compute(env: &Env, amount: i128) -> Result<FeeSplitPreview, Error>
             let pf = amount
                 .saturating_mul(i128::from(config.platform_fee_bps))
                 / i128::from(FEE_BPS_DENOM);
-            let rf = amount
-                .saturating_mul(i128::from(config.royalty_bps))
-                / i128::from(FEE_BPS_DENOM);
+            let rf = if include_royalty {
+                amount
+                    .saturating_mul(i128::from(config.royalty_bps))
+                    / i128::from(FEE_BPS_DENOM)
+            } else {
+                0
+            };
             (pf, rf)
         }
         None => (0i128, 0i128),

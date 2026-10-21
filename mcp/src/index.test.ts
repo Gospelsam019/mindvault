@@ -3033,6 +3033,30 @@ describe("offline catalog cache fallback (#556)", () => {
     expect(out).toContain("cached");
   });
 
+  it("coalesces concurrent reads for the same catalog URL", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(mockResponse([catalogItem]));
+
+    const [first, second] = await Promise.all([browse(), browse()]);
+
+    expect(first).toContain("[c1] Cached One");
+    expect(second).toContain("[c1] Cached One");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("coalesces a failed read but does not retain it for later calls", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(mockResponse({ error: "bad request" }, false, 400));
+
+    const results = await Promise.allSettled([browse(), browse()]);
+
+    expect(results.every((result) => result.status === "rejected")).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    await expect(browse()).rejects.toThrow(/bad request/);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("search applies filters to the cached snapshot and labels it when offline", async () => {
     recordCatalogSnapshot([catalogItem]);
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ECONNREFUSED"));
@@ -3060,6 +3084,25 @@ describe("offline catalog cache fallback (#556)", () => {
     const parsed = JSON.parse(await preview("res-9"));
     expect(parsed.title).toBe("Cached Preview");
     expect(parsed.offlineCache).toContain("Offline catalog snapshot served");
+  });
+
+  it("coalesces concurrent preview misses for the same resource", async () => {
+    const previewMeta = {
+      id: "res-shared",
+      title: "Shared Preview",
+      price: "4",
+      description: "D",
+      resourceType: "article",
+      verificationStatus: "verified",
+      accessUrl: "https://example.com/shared",
+    };
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(mockResponse(previewMeta));
+
+    const [first, second] = await Promise.all([preview("res-shared"), preview("res-shared")]);
+
+    expect(JSON.parse(first).title).toBe("Shared Preview");
+    expect(JSON.parse(second).title).toBe("Shared Preview");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it("serves the snapshot for a gateway error the retry layer could not ride out", async () => {

@@ -99,6 +99,8 @@ pub const MAX_RESOURCE_ID_LEN: u32 = 24;
 /// easy to find, document, and change in a single place instead of
 /// scattered `limit.min(20)` literals.
 pub const LIST_PAGE_CAP: u32 = 20;
+/// Maximum catalog entries scanned by one holder lease listing request.
+pub const LEASE_PAGE_CAP: u32 = 20;
 pub const TOP_TAGS_CAP: u32 = 20;
 /// Maximum number of resources that can be registered in a single batch
 /// via `register_batch`. Keeps execution bounded and prevents transaction
@@ -177,6 +179,8 @@ pub const METHOD_SCHEMA: &[(&str, &str)] = &[
     ("get_metadata_pointers", "—"),
     ("set_tags", "creator"),
     ("set_royalty_recipient", "creator"),
+    ("set_royalties_disabled", "creator"),
+    ("royalties_disabled", "—"),
     ("set_listed", "creator"),
     ("delist", "creator"),
     ("freeze_resource", "creator"),
@@ -287,6 +291,7 @@ pub const METHOD_SCHEMA: &[(&str, &str)] = &[
     ("set_fee_destination", "admin"),
     ("get_fee_destination", "—"),
     ("preview_fee_split", "—"),
+    ("preview_fee_split_for_resource", "—"),
     // ── Index repair ──────────────────────────────────────────────────────
     ("repair_index", "admin"),
     ("repair_index_chunk", "admin"),
@@ -322,6 +327,7 @@ pub const METHOD_SCHEMA: &[(&str, &str)] = &[
     ("get_lease", "—"),
     ("lease_is_active", "—"),
     ("lease_price", "—"),
+    ("list_holder_leases_page", "—"),
     // ── TTL ───────────────────────────────────────────────────────────────
     ("extend_resource_ttl", "creator"),
     // ── Creator earnings estimator (#804) ─────────────────────────────────
@@ -1000,6 +1006,8 @@ pub enum AuxKey {
     /// `true`, every payment, refund, anchor, and lease-write method returns
     /// `ContractPaused`, while catalog management stays available.
     PaymentsPaused,
+    /// Per-resource creator opt-out from future royalty routing. Value type: `bool`.
+    RoyaltiesDisabled(String),
 }
 
 /// Payload of every role grant/revoke event (`addverif`/`rmverif`,
@@ -1310,6 +1318,15 @@ pub struct Lease {
     pub state: LeaseState,
     /// Ledger sequence at which the lease was recorded.
     pub recorded_at: u32,
+}
+
+/// One bounded page of a holder's currently active, unexpired leases.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct LeasePage {
+    pub leases: Vec<Lease>,
+    /// Global catalog cursor for the next page, or `None` when the scan is complete.
+    pub next_cursor: Option<u32>,
 }
 
 #[contracterror(export = false)]
@@ -2095,6 +2112,36 @@ impl VaultRegistry {
         env.events()
             .publish((symbol_short!("setroyal"), id), (old_recipient, recipient));
         Ok(())
+    }
+
+    /// Enable or disable future royalty routing for one resource. Only its
+    /// current creator may change this setting; absent storage defaults to false.
+    /// Emits `setroyoff` with the previous and new values.
+    pub fn set_royalties_disabled(
+        env: Env,
+        id: String,
+        disabled: bool,
+    ) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        Self::validate_resource_id(&id)?;
+        let resource = Self::load(&env, &id)?;
+        resource.creator.require_auth();
+        Self::ensure_mutable(&resource)?;
+
+        let key = AuxKey::RoyaltiesDisabled(id.clone());
+        let old = env.storage().persistent().get(&key).unwrap_or(false);
+        env.storage().persistent().set(&key, &disabled);
+        Self::bump_persistent(&env, &key);
+        env.events()
+            .publish((symbol_short!("setroyoff"), id), (old, disabled));
+        Ok(())
+    }
+
+    /// Read a resource's royalty opt-out setting. Older resources default to false.
+    pub fn royalties_disabled(env: Env, id: String) -> Result<bool, Error> {
+        Self::validate_resource_id(&id)?;
+        Self::load(&env, &id)?;
+        Ok(Self::royalty_opt_out(&env, &id))
     }
 
     pub fn transfer_ownership(env: Env, id: String, new_creator: Address) -> Result<(), Error> {
@@ -3749,6 +3796,27 @@ impl VaultRegistry {
         fee_split_preview::compute(&env, amount)
     }
 
+    /// Calculate a fee split using the resource's royalty opt-out setting.
+    pub fn preview_fee_split_for_resource(
+        env: Env,
+        resource_id: String,
+        amount: i128,
+    ) -> Result<FeeSplitPreview, Error> {
+        Self::validate_resource_id(&resource_id)?;
+        Self::load(&env, &resource_id)?;
+        let disabled = Self::royalty_opt_out(&env, &resource_id);
+        fee_split_preview::compute_with_royalty(&env, amount, !disabled)
+    }
+
+    fn royalty_opt_out(env: &Env, resource_id: &String) -> bool {
+        let key = AuxKey::RoyaltiesDisabled(resource_id.clone());
+        let disabled: Option<bool> = env.storage().persistent().get(&key);
+        if disabled.is_some() {
+            Self::bump_persistent(env, &key);
+        }
+        disabled.unwrap_or(false)
+    }
+
     fn default_fee_destination() -> FeeDestinationConfig {
         FeeDestinationConfig {
             bps: 0,
@@ -4950,13 +5018,16 @@ impl VaultRegistry {
             return Err(Error::PaymentAmountMismatch);
         }
 
-        let key = DataKey::Lease(resource_id.clone(), holder);
+        let key = DataKey::Lease(resource_id.clone(), holder.clone());
         let mut lease: Lease = env
             .storage()
             .persistent()
             .get(&key)
             .ok_or(Error::NotFound)?;
 
+        if lease.resource_id != resource_id || lease.holder != holder {
+            return Err(Error::NotFound);
+        }
         if lease.state != LeaseState::Active || env.ledger().sequence() >= lease.expiry_ledger {
             return Err(Error::InvalidPaymentTransition);
         }
@@ -5095,6 +5166,52 @@ impl VaultRegistry {
         {
             Some(lease) => Self::lease_grants_access(&env, &lease),
             None => false,
+        }
+    }
+
+    /// List a holder's active, unexpired leases in resource registration order.
+    /// The global catalog cursor is stable across pages; each call scans at most
+    /// `LEASE_PAGE_CAP` entries (20), even when leases are expired or revoked.
+    pub fn list_holder_leases_page(
+        env: Env,
+        holder: Address,
+        cursor: u32,
+        limit: u32,
+    ) -> LeasePage {
+        let total: u32 = env.storage().instance().get(&DataKey::Count).unwrap_or(0);
+        let page_size = limit.min(LEASE_PAGE_CAP);
+        let mut leases = Vec::new(&env);
+        let mut i = cursor;
+        let mut scanned = 0;
+        while i < total && scanned < page_size {
+            let index_key = DataKey::Index(i);
+            if let Some(resource_id) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, String>(&index_key)
+            {
+                Self::bump_persistent(&env, &index_key);
+                let lease_key = DataKey::Lease(resource_id.clone(), holder.clone());
+                if let Some(lease) = env
+                    .storage()
+                    .persistent()
+                    .get::<DataKey, Lease>(&lease_key)
+                {
+                    if lease.resource_id == resource_id
+                        && lease.holder == holder
+                        && Self::lease_grants_access(&env, &lease)
+                    {
+                        Self::bump_persistent(&env, &lease_key);
+                        leases.push_back(lease);
+                    }
+                }
+            }
+            i += 1;
+            scanned += 1;
+        }
+        LeasePage {
+            leases,
+            next_cursor: if i < total { Some(i) } else { None },
         }
     }
 
@@ -5931,6 +6048,10 @@ impl VaultRegistry {
         let key = DataKey::Resource(resource.id.clone());
         env.storage().persistent().set(&key, resource as &Resource);
         Self::bump_persistent(env, &key);
+        let royalty_key = AuxKey::RoyaltiesDisabled(resource.id.clone());
+        if env.storage().persistent().has(&royalty_key) {
+            Self::bump_persistent(env, &royalty_key);
+        }
     }
 
     /// Extend persistent entry TTL when below threshold (Soroban archival safety).
