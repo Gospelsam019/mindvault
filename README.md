@@ -256,6 +256,11 @@ MIT
 
 ## Handsoff notes
 
+<!-- handsoff-issue-124 -->
+- #124: [MCP] [Bug] Enforce outbound URL allowlists for metadata and content verification
+
+<!-- handsoff-issue-125 -->
+- #125: [MCP] [Feature] Add export format option for receipt history
 <!-- handsoff-issue-25 -->
 - #25: [Contract] [Bug] Prevent expired pause deadlines from reactivating after timestamp rollback
 <!-- handsoff-issue-3 -->
