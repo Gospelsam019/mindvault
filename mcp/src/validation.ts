@@ -320,6 +320,7 @@ export const TOOL_ARGUMENT_SPECS: Record<string, ToolArgumentSpec> = {
       max: MAX_SETTLEMENT_TIMEOUT_MS,
     },
     intervalMs: { kind: "integer", min: MIN_SETTLEMENT_INTERVAL_MS },
+    waitPolicy: { kind: "enum", values: ["return_after_submit", "wait_for_final_result"] },
     idempotencyKey: IDEMPOTENCY_KEY,
   },
   mindvault_purchase_status: {
@@ -383,7 +384,12 @@ export const TOOL_ARGUMENT_SPECS: Record<string, ToolArgumentSpec> = {
     right: { kind: "enum", values: ["testnet", "mainnet"], required: true },
     limit: { kind: "integer", min: 1, max: 100 },
   },
-  mindvault_tx_status: { txHash: { kind: "hash", required: true, bareHex: true } },
+  mindvault_tx_status: {
+    txHash: { kind: "hash", required: true, bareHex: true },
+    wait: { kind: "flag" },
+    timeoutMs: { kind: "integer", min: 0, max: MAX_SETTLEMENT_TIMEOUT_MS },
+    intervalMs: { kind: "integer", min: MIN_SETTLEMENT_INTERVAL_MS },
+  },
   // `confirm` is what resetGuard.isResetConfirmed reads. It was advertised in
   // ListTools and absent here, so every confirmed reset failed validation as an
   // unknown argument and the tool was permanently stuck in preview mode (#596).

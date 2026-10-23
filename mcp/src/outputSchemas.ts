@@ -306,6 +306,7 @@ export const SETTLEMENT_SCHEMA = {
     timedOut: { type: "boolean" },
     attempts: { type: "integer" },
     skipped: { type: "boolean" },
+    retryable: { type: "boolean" },
     message: { type: "string" },
   },
   required: [
@@ -317,6 +318,7 @@ export const SETTLEMENT_SCHEMA = {
     "timedOut",
     "attempts",
     "skipped",
+    "retryable",
     "message",
   ],
 } as const;
