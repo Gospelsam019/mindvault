@@ -5,7 +5,7 @@
 
 This file is a generated, human-readable summary of the MCP tool surface (ListTools). It is scoped to the `mcp/` package and intended as a quick reference for integrators and reviewers.
 
-Generated from `mcp/src/tools.ts` (61 tools).
+Generated from `mcp/src/tools.ts` (65 tools).
 
 ## Tools
 
@@ -40,6 +40,10 @@ Generated from `mcp/src/tools.ts` (61 tools).
 - `mindvault_tx_status`: Look up the status of a Stellar transaction by hash via Soroban RPC. Returns SUCCESS, FAILED, or NOT_FOUND along with ledger number, close time, application order, and XDR envelopes. Useful for debugging on-chain registration failures.
 - `mindvault_reset`: Clear credentials from memory and disk (~/.mindvault/state.json). By default only the active profile is cleared; pass all=true to remove every profile and delete the state file. After reset, run mindvault_setup_wallet and mindvault_register again.
 - `mindvault_backup_state`: Export ~/.mindvault/state.json to a mode-0600 encrypted recovery file after an explicit confirmation step. Requires a passphrase (min 8 chars); wallet secret keys and API keys never appear in plaintext. Restore with mindvault_restore_state using the file contents and same passphrase.
+- `mindvault_preview_state_migration`: Read ~/.mindvault/state.json and preview any legacy-to-v1 profile migration without changing it. Reports affected field paths and whether a private recovery backup will be created before applying.
+- `mindvault_apply_state_migration`: Apply the pending legacy-to-v1 profile migration after explicit confirmation. A mode-0600 copy of the original state file is created first; the atomic write leaves the original state intact if applying fails. Omit confirm to preview without writing.
+- `mindvault_export_state_selective`: Export a stable v1 JSON snapshot containing active profile, profile names, and network preferences only. Wallet public keys, private keys, seed phrases, and publisher API keys are excluded.
+- `mindvault_import_state_selective`: Import a v1 selective state JSON snapshot. Merges profile names and network preferences while preserving existing wallets and publisher API keys; imported data cannot replace credentials.
 - `mindvault_resource_provenance`: Return the chronological creator, purchase, and ownership-transfer chain recorded for a resource. Never exposes wallet secrets or API keys.
 - `mindvault_resource_change_log`: Return recent price and metadata changes recorded for a resource in chronological order.
 - `mindvault_restore_state`: Restore ~/.mindvault/state.json from an encrypted backup produced by mindvault_backup_state. Validates integrity (wrong passphrase or tampered data fails before any write). Replaces in-memory profiles and re-persists to disk (mode 0600). Existing reset behavior is unchanged.

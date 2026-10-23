@@ -64,13 +64,7 @@ import { StrKey } from "@stellar/stellar-sdk";
  *   - An empty array (`[]`) is valid and clears all tags from the resource.
  */
 export type ArgumentKind =
-  | "string"
-  | "enum"
-  | "flag"
-  | "hash"
-  | "tag_array"
-  | "string_array"
-  | "integer";
+  "string" | "enum" | "flag" | "hash" | "tag_array" | "string_array" | "integer";
 
 export interface ArgumentSpec {
   kind: ArgumentKind;
@@ -393,6 +387,12 @@ export const TOOL_ARGUMENT_SPECS: Record<string, ToolArgumentSpec> = {
     confirmMainnet: CONFIRM_MAINNET,
   },
   mindvault_backup_state: { passphrase: PASSPHRASE, confirm: { kind: "flag" } },
+  mindvault_preview_state_migration: {},
+  mindvault_apply_state_migration: { confirm: { kind: "flag" } },
+  mindvault_export_state_selective: {},
+  mindvault_import_state_selective: {
+    blob: { kind: "string", required: true, maxLength: 131_072 },
+  },
   mindvault_resource_provenance: { resourceId: RESOURCE_ID },
   mindvault_resource_change_log: { resourceId: RESOURCE_ID },
   mindvault_restore_state: {

@@ -39,9 +39,12 @@ export function groupOf(name: string): string {
     return "Wallet";
   if (["mindvault_use_profile", "mindvault_list_profiles"].includes(name)) return "Profiles";
   if (
-    ["mindvault_browse", "mindvault_search", "mindvault_preview", "mindvault_compare_catalogs"].includes(
-      name,
-    )
+    [
+      "mindvault_browse",
+      "mindvault_search",
+      "mindvault_preview",
+      "mindvault_compare_catalogs",
+    ].includes(name)
   )
     return "Catalog";
   if (
@@ -80,14 +83,20 @@ export function groupOf(name: string): string {
   )
     return "Registry & Diagnostics";
   if (
-    ["mindvault_purchase_history", "mindvault_purchase_status", "mindvault_export_receipts"].includes(
-      name,
-    )
+    [
+      "mindvault_purchase_history",
+      "mindvault_purchase_status",
+      "mindvault_export_receipts",
+    ].includes(name)
   )
     return "Receipts";
   if (
     [
       "mindvault_backup_state",
+      "mindvault_preview_state_migration",
+      "mindvault_apply_state_migration",
+      "mindvault_export_state_selective",
+      "mindvault_import_state_selective",
       "mindvault_restore_state",
       "mindvault_reset",
       "mindvault_check_state_permissions",
@@ -159,7 +168,7 @@ export function renderToolReference(tools: readonly ToolDefinition[]): string {
     "> **Read-only mode:** when `MINDVAULT_READ_ONLY` is set, mutating tools",
     "> (`mindvault_buy`, `mindvault_setup_wallet`, `mindvault_use_profile`, …) are not",
     "> advertised by ListTools and are refused on dispatch. Treat them as unavailable",
-    "> in this listing rather than planning around a later \"not available\" error (#845).",
+    '> in this listing rather than planning around a later "not available" error (#845).',
     "",
     "---",
     "",
