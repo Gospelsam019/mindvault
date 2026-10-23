@@ -165,9 +165,9 @@ describe("stateBackup", () => {
   it("restore rejects tampered blob without calling write", () => {
     const blob = exportState(PASS);
     const parts = blob.split(":");
-    // flip last char of ciphertext
-    const last = parts[3];
-    const flipped = last.slice(0, -1) + (last.endsWith("A") ? "B" : "A");
+    // Change a full byte; the trailing base64 character may contain only padding bits.
+    const payload = parts[3];
+    const flipped = (payload[0] === "A" ? "B" : "A") + payload.slice(1);
     const tampered = `${parts[0]}:${parts[1]}:${parts[2]}:${flipped}`;
     let wrote = false;
     expect(() =>
