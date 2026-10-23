@@ -16,6 +16,14 @@ unaffordable payment through.
 
 Source: [`mcp/src/usdcAmount.ts`](../mcp/src/usdcAmount.ts).
 
+## Identifying the asset
+
+A Horizon balance is canonical USDC only when its asset code is `USDC` and its
+issuer matches the selected network's `usdcClassicIssuer` preset. A token with
+the same symbol from another issuer is ignored. Soroban payments use the
+selected network's `usdcSacContractId`; the SAC and classic trustline identify
+the same underlying issuer asset.
+
 ## One conversion, tagged at the boundary
 
 The factor is defined once (`STROOPS_PER_USDC`) and every amount that crosses a

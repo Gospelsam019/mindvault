@@ -462,6 +462,14 @@ exports[`tool schema snapshots > mindvault_buy > input schema 1`] = `
       "description": "Optional flag. When true, wait and poll the payment transaction on Soroban until it settles (SUCCESS or FAILED) or the timeout elapses, returning a settlement confirmation block. Off by default, in which case the buy returns as soon as the payment response arrives.",
       "type": "boolean",
     },
+    "waitPolicy": {
+      "description": "Optional settlement policy. return_after_submit returns with the transaction hash immediately; wait_for_final_result polls until SUCCESS, FAILED, or timeout. The legacy wait flag remains supported.",
+      "enum": [
+        "return_after_submit",
+        "wait_for_final_result",
+      ],
+      "type": "string",
+    },
   },
   "required": [
     "resourceId",
@@ -501,6 +509,9 @@ exports[`tool schema snapshots > mindvault_buy > output schema 1`] = `
             "polled": {
               "type": "boolean",
             },
+            "retryable": {
+              "type": "boolean",
+            },
             "settled": {
               "type": "boolean",
             },
@@ -535,6 +546,7 @@ exports[`tool schema snapshots > mindvault_buy > output schema 1`] = `
             "timedOut",
             "attempts",
             "skipped",
+            "retryable",
             "message",
           ],
           "type": "object",
@@ -4979,6 +4991,17 @@ exports[`tool schema snapshots > mindvault_tx_status > annotations 1`] = `
 exports[`tool schema snapshots > mindvault_tx_status > input schema 1`] = `
 {
   "properties": {
+    "intervalMs": {
+      "description": "Delay between status polls in milliseconds (default 2000; minimum 200).",
+      "minimum": 200,
+      "type": "integer",
+    },
+    "timeoutMs": {
+      "description": "Maximum watch duration in milliseconds (default 60000; maximum 300000).",
+      "maximum": 300000,
+      "minimum": 0,
+      "type": "integer",
+    },
     "txHash": {
       "description": "The 64-character hex transaction hash from Stellar (a sha256 digest; case-insensitive, 'sha256:' prefix accepted). From mindvault_register_onchain or mindvault_publish output.",
       "examples": [
@@ -4986,6 +5009,10 @@ exports[`tool schema snapshots > mindvault_tx_status > input schema 1`] = `
         "3fdba35f04dc8c462986c992bcf875546257113072a909c162f7e470e581e278",
       ],
       "type": "string",
+    },
+    "wait": {
+      "description": "Poll until the transaction reaches SUCCESS or FAILED.",
+      "type": "boolean",
     },
   },
   "required": [

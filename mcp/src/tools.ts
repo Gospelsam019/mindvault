@@ -480,6 +480,12 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
           description:
             "Optional flag. When true, wait and poll the payment transaction on Soroban until it settles (SUCCESS or FAILED) or the timeout elapses, returning a settlement confirmation block. Off by default, in which case the buy returns as soon as the payment response arrives.",
         },
+        waitPolicy: {
+          type: "string",
+          enum: ["return_after_submit", "wait_for_final_result"],
+          description:
+            "Optional settlement policy. return_after_submit returns with the transaction hash immediately; wait_for_final_result polls until SUCCESS, FAILED, or timeout. The legacy wait flag remains supported.",
+        },
         timeoutMs: {
           type: "integer",
           minimum: 0,
@@ -931,7 +937,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "mindvault_tx_status",
     description:
-      "Look up the status of a Stellar transaction by hash via Soroban RPC. Returns SUCCESS, FAILED, or NOT_FOUND along with ledger number, close time, application order, and XDR envelopes. Useful for debugging on-chain registration failures.",
+      "Look up a Stellar transaction by hash via Soroban RPC. Pass wait: true to watch until SUCCESS or FAILED, with bounded timeout and progress notifications; the watch can be canceled. Every result includes the hash and current status, and lookup failures are retryable.",
     inputSchema: {
       type: "object",
       properties: {
@@ -943,6 +949,21 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
             "f47ac10b58cc4372a5670e02b2c3d479c3e5d0a1b2c3d4e5f6a7b8c9d0e1f2a3",
             "3fdba35f04dc8c462986c992bcf875546257113072a909c162f7e470e581e278",
           ],
+        },
+        wait: {
+          type: "boolean",
+          description: "Poll until the transaction reaches SUCCESS or FAILED.",
+        },
+        timeoutMs: {
+          type: "integer",
+          minimum: 0,
+          maximum: 300000,
+          description: "Maximum watch duration in milliseconds (default 60000; maximum 300000).",
+        },
+        intervalMs: {
+          type: "integer",
+          minimum: 200,
+          description: "Delay between status polls in milliseconds (default 2000; minimum 200).",
         },
       },
       required: ["txHash"],

@@ -7,6 +7,7 @@
 import {
   checkContractBindings,
   createRegistryClient,
+  getNetworkPreset,
   getAttestationHash,
   Errors as RegistryErrors,
   listResources,
@@ -182,7 +183,9 @@ import {
   normalizeSettlementIntervalMs,
   normalizeSettlementTimeoutMs,
   normalizeSettlementWaitFlag,
+  normalizeSettlementWaitPolicy,
   pollSettlement,
+  isTransactionSettled,
   type SettlementSnapshot,
   type TransactionLookup,
 } from "./settlement.js";
@@ -1102,8 +1105,12 @@ async function getBalanceDetails(publicKey: string): Promise<BalanceDetails> {
   const reserve = baseReserve + subentryCount * entryReserve;
   const available = Math.max(0, parseFloat(xlm) - reserve);
 
+  const usdcIssuer = getNetworkPreset(STELLAR_NETWORK).usdcClassicIssuer;
   const usdcBalance = balances.find(
-    (b: any) => b.asset_type === "credit_alphanum4" && b.asset_code === "USDC",
+    (b: any) =>
+      b.asset_type === "credit_alphanum4" &&
+      b.asset_code === "USDC" &&
+      b.asset_issuer === usdcIssuer,
   );
 
   if (!usdcBalance) {
@@ -1182,7 +1189,13 @@ async function getAccountBalances(
   if (!res.ok) return { usdc: "0", native: "0", funded: false };
   const data: any = await res.json();
   const balances: any[] = data.balances ?? [];
-  const usdc = balances.find((b) => b.asset_type === "credit_alphanum4" && b.asset_code === "USDC");
+  const usdcIssuer = getNetworkPreset(STELLAR_NETWORK).usdcClassicIssuer;
+  const usdc = balances.find(
+    (b: any) =>
+      b.asset_type === "credit_alphanum4" &&
+      b.asset_code === "USDC" &&
+      b.asset_issuer === usdcIssuer,
+  );
   const native = balances.find((b) => b.asset_type === "native");
   return { usdc: usdc?.balance ?? "0", native: native?.balance ?? "0", funded: true };
 }
@@ -1262,9 +1275,66 @@ async function insufficientFundsMessage(
   ].join("\n");
 }
 
-export async function txStatus(txHash: string): Promise<string> {
+export async function txStatus(
+  txHash: string,
+  options: { wait?: unknown; timeoutMs?: unknown; intervalMs?: unknown } = {},
+  onProgress?: (progress: number, total?: number, message?: string) => Promise<void>,
+): Promise<string> {
   const hash = (txHash ?? "").trim();
   if (!hash) return "Provide a transaction hash to look up.";
+  const wait = normalizeSettlementWaitFlag(options.wait);
+  const timeoutMs = normalizeSettlementTimeoutMs(options.timeoutMs);
+  const intervalMs = normalizeSettlementIntervalMs(options.intervalMs);
+  if (wait) {
+    try {
+      const result = await pollSettlement({
+        txHash: hash,
+        wait: true,
+        timeoutMs,
+        intervalMs,
+        fetchTransaction: fetchTransactionLookup,
+        onProgress,
+        sleep: sleepMs,
+      });
+      const settled = isTransactionSettled(result.tx.status);
+      return JSON.stringify(
+        {
+          status: result.tx.status,
+          hash,
+          found: result.tx.found,
+          ledger: result.tx.ledger,
+          ledgerCloseTime: result.tx.ledgerCloseTime,
+          settled,
+          timedOut: result.timedOut,
+          attempts: result.attempts,
+          retryable: !settled,
+          message: result.timedOut
+            ? `Timed out while watching ${hash}; check it again with mindvault_tx_status.`
+            : settled
+              ? `Transaction reached ${result.tx.status}.`
+              : `Transaction is ${result.tx.status}; check it again with mindvault_tx_status.`,
+        },
+        null,
+        2,
+      );
+    } catch (err) {
+      if (isToolCanceled(err)) throw err;
+      return JSON.stringify(
+        {
+          status: "LOOKUP_FAILED",
+          hash,
+          found: false,
+          settled: false,
+          timedOut: false,
+          attempts: 1,
+          retryable: true,
+          message: `Could not check transaction ${hash} because the Soroban RPC lookup failed. Retry mindvault_tx_status with this hash.`,
+        },
+        null,
+        2,
+      );
+    }
+  }
   const res = await sorobanRpcFetch(
     {
       method: "POST",
@@ -2484,6 +2554,7 @@ export async function buy(
   timeoutMs?: unknown,
   intervalMs?: unknown,
   idempotencyKey?: string,
+  waitPolicy?: unknown,
 ): Promise<string> {
   if (dryRun) {
     const initialDryRun = dryRunBuy(
@@ -2637,7 +2708,7 @@ export async function buy(
   // progress counter continues after step 3 and stays monotonic while the
   // poller reports; without wait the counter is untouched and the summary
   // simply carries an un-polled settlement block.
-  const waitForSettlement = normalizeSettlementWaitFlag(wait);
+  const waitForSettlement = normalizeSettlementWaitPolicy(wait, waitPolicy);
   const settleTimeoutMs = normalizeSettlementTimeoutMs(timeoutMs);
   const settleIntervalMs = normalizeSettlementIntervalMs(intervalMs);
   let settlement: SettlementSnapshot = buildSettlementSnapshot({
@@ -2653,25 +2724,40 @@ export async function buy(
     const settleSteps = estimateSettlementSteps(true, settleTimeoutMs, settleIntervalMs);
     settleProgressTotal = settleSteps;
     await onProgress?.(4, 4 + settleSteps, "Waiting for payment settlement");
-    const result = await pollSettlement({
-      txHash,
-      wait: true,
-      timeoutMs: settleTimeoutMs,
-      intervalMs: settleIntervalMs,
-      fetchTransaction: fetchTransactionLookup,
-      onProgress: async (p, total, message) => {
-        settleProgressEmitted = p;
-        settleProgressTotal = total ?? settleSteps;
-        await onProgress?.(4 + p, 4 + (total ?? settleSteps), message);
-      },
-      sleep: sleepMs,
-    });
-    settlement = buildSettlementSnapshot({
-      txHash,
-      wait: true,
-      skipped: false,
-      result,
-    });
+    try {
+      const result = await pollSettlement({
+        txHash,
+        wait: true,
+        timeoutMs: settleTimeoutMs,
+        intervalMs: settleIntervalMs,
+        fetchTransaction: fetchTransactionLookup,
+        onProgress: async (p, total, message) => {
+          settleProgressEmitted = p;
+          settleProgressTotal = total ?? settleSteps;
+          await onProgress?.(4 + p, 4 + (total ?? settleSteps), message);
+        },
+        sleep: sleepMs,
+      });
+      settlement = buildSettlementSnapshot({
+        txHash,
+        wait: true,
+        skipped: false,
+        result,
+      });
+    } catch {
+      settlement = {
+        polled: true,
+        txHash,
+        status: "LOOKUP_FAILED",
+        settled: false,
+        success: false,
+        timedOut: false,
+        attempts: 1,
+        skipped: false,
+        retryable: true,
+        message: `Payment was submitted, but its status could not be checked. Retry mindvault_tx_status with transaction hash ${txHash}.`,
+      };
+    }
   }
 
   const summary = {
@@ -4287,6 +4373,8 @@ async function dispatchToolOutcome(
               args.wait,
               args.timeoutMs,
               args.intervalMs,
+              undefined,
+              args.waitPolicy,
             ),
         );
       case "mindvault_buy_lease":
@@ -4373,7 +4461,11 @@ async function dispatchToolOutcome(
       case "mindvault_set_tags":
         return setTags(requiredString(args, "resourceId"), requiredTagArray(args, "tags"));
       case "mindvault_tx_status":
-        return txStatus(requiredString(args, "txHash"));
+        return txStatus(
+          requiredString(args, "txHash"),
+          { wait: args.wait, timeoutMs: args.timeoutMs, intervalMs: args.intervalMs },
+          onProgress,
+        );
       case "mindvault_reset":
         return resetState(flag(args, "all"), rawRecord.confirm);
       case "mindvault_backup_state":
@@ -4511,7 +4603,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     }
     return normalizeToolResult(name, result, outputSchemaFor);
   } catch (err: any) {
-    if (isToolCanceled(err)) return canceledToolResult(name);
+    if (isToolCanceled(err)) {
+      const transaction =
+        name === "mindvault_tx_status" && typeof args.txHash === "string"
+          ? { hash: args.txHash, status: "IN_PROGRESS" }
+          : undefined;
+      return canceledToolResult(name, transaction);
+    }
     const mapped = mappedErrorOf(err);
     return {
       content: [{ type: "text", text: `Error: ${safeErrorMessage(err)}` }],
