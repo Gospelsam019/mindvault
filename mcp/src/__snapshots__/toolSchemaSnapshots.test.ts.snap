@@ -145,6 +145,30 @@ exports[`tool schema snapshots > mindvault_agent_status > output schema 1`] = `
 }
 `;
 
+exports[`tool schema snapshots > mindvault_apply_state_migration > annotations 1`] = `
+{
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": false,
+  "title": "Apply State Migration",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_apply_state_migration > input schema 1`] = `
+{
+  "properties": {
+    "confirm": {
+      "description": "Required to apply the migration; omitted or false only previews it.",
+      "type": "boolean",
+    },
+  },
+  "required": [],
+  "type": "object",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_apply_state_migration > output schema 1`] = `null`;
+
 exports[`tool schema snapshots > mindvault_backup_state > annotations 1`] = `
 {
   "destructiveHint": false,
@@ -1776,6 +1800,25 @@ exports[`tool schema snapshots > mindvault_export_receipts > output schema 1`] =
 }
 `;
 
+exports[`tool schema snapshots > mindvault_export_state_selective > annotations 1`] = `
+{
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": true,
+  "title": "Export Selective State",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_export_state_selective > input schema 1`] = `
+{
+  "properties": {},
+  "required": [],
+  "type": "object",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_export_state_selective > output schema 1`] = `null`;
+
 exports[`tool schema snapshots > mindvault_fee_config > annotations 1`] = `
 {
   "destructiveHint": false,
@@ -1971,6 +2014,32 @@ exports[`tool schema snapshots > mindvault_freeze > output schema 1`] = `
   "type": "object",
 }
 `;
+
+exports[`tool schema snapshots > mindvault_import_state_selective > annotations 1`] = `
+{
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": false,
+  "title": "Import Selective State",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_import_state_selective > input schema 1`] = `
+{
+  "properties": {
+    "blob": {
+      "description": "Versioned v1 JSON from mindvault_export_state_selective.",
+      "type": "string",
+    },
+  },
+  "required": [
+    "blob",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_import_state_selective > output schema 1`] = `null`;
 
 exports[`tool schema snapshots > mindvault_import_wallet > annotations 1`] = `
 {
@@ -5828,10 +5897,30 @@ exports[`tool schema snapshots > mindvault_contract_preflight > output schema 1`
 }
 `;
 
+exports[`tool schema snapshots > mindvault_preview_state_migration > annotations 1`] = `
+{
+  "destructiveHint": false,
+  "idempotentHint": true,
+  "readOnlyHint": true,
+  "title": "Preview State Migration",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_preview_state_migration > input schema 1`] = `
+{
+  "properties": {},
+  "required": [],
+  "type": "object",
+}
+`;
+
+exports[`tool schema snapshots > mindvault_preview_state_migration > output schema 1`] = `null`;
+
 exports[`tool schema snapshots > the covered tool names are pinned 1`] = `
 [
   "mindvault_accept_transfer",
   "mindvault_agent_status",
+  "mindvault_apply_state_migration",
   "mindvault_backup_state",
   "mindvault_batch_catalog_lookup",
   "mindvault_browse",
@@ -5844,8 +5933,10 @@ exports[`tool schema snapshots > the covered tool names are pinned 1`] = `
   "mindvault_contract_preflight",
   "mindvault_debug_bundle",
   "mindvault_export_receipts",
+  "mindvault_export_state_selective",
   "mindvault_fee_config",
   "mindvault_freeze",
+  "mindvault_import_state_selective",
   "mindvault_import_wallet",
   "mindvault_list_profiles",
   "mindvault_mainnet_banner",
@@ -5854,6 +5945,7 @@ exports[`tool schema snapshots > the covered tool names are pinned 1`] = `
   "mindvault_pending_transfer",
   "mindvault_preview",
   "mindvault_preview_metadata_hash",
+  "mindvault_preview_state_migration",
   "mindvault_prewarm_catalog",
   "mindvault_publish",
   "mindvault_publish_batch",

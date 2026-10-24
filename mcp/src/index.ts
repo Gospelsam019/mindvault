@@ -170,9 +170,11 @@ import {
   exportStateFile,
   restoreState,
   checkStatePermissions,
-  preserveLegacyState,
   quarantineStateFile,
-  writeAtomically,
+  previewPersistedStateMigration,
+  persistStateWithMigrationBackup,
+  exportSelectiveState,
+  importSelectiveState,
 } from "./stateBackup.js";
 import { provenanceChain, recordResourceHistory, resourceChangeLog } from "./resourceHistory.js";
 import { logger } from "./logger.js";
@@ -417,9 +419,9 @@ export function _resetProfiles(): void {
 }
 
 function applyRestoredState(state: ProfileState): void {
+  persistStateWithMigrationBackup(state);
   profiles = state.profiles;
   activeProfileName = state.activeProfile;
-  saveState();
 }
 
 export function backupState(passphrase: string, confirm: unknown = false): string {
@@ -443,6 +445,53 @@ export function restoreStateTool(blob: string, passphrase: string): string {
   return restoreState(blob, passphrase, applyRestoredState, {
     expectedNetwork: NETWORK,
   });
+}
+
+function currentProfileState(): ProfileState {
+  return {
+    version: STATE_VERSION,
+    activeProfile: activeProfileName,
+    profiles: persistableProfiles(),
+  };
+}
+
+export function previewStateMigrationTool(): string {
+  return previewPersistedStateMigration();
+}
+
+export function applyStateMigrationTool(confirm: unknown = false): string {
+  if (!isResetConfirmed(confirm)) {
+    return [
+      previewPersistedStateMigration(),
+      "",
+      "Migration NOT applied — confirmation required.",
+      "To proceed, call mindvault_apply_state_migration again with confirm: true.",
+    ].join("\n");
+  }
+  const backupPath = persistStateWithMigrationBackup(currentProfileState());
+  if (!backupPath) return "No state migration is pending; state was not changed.";
+  return [
+    `State migration applied: legacy single-wallet -> profile schema v${STATE_VERSION}.`,
+    `Recovery backup: ${backupPath} (mode 0600).`,
+  ].join("\n");
+}
+
+export function exportSelectiveStateTool(): string {
+  return exportSelectiveState(currentProfileState());
+}
+
+export function importSelectiveStateTool(blob: string): string {
+  const updated = importSelectiveState(blob, currentProfileState());
+  const backupPath = persistStateWithMigrationBackup(updated);
+  profiles = updated.profiles;
+  activeProfileName = updated.activeProfile;
+  return [
+    `Selective state imported: ${Object.keys(updated.profiles).length} profile(s), active "${updated.activeProfile}".`,
+    "Wallet secret keys and publisher API keys were not imported or overwritten.",
+    backupPath ? `Legacy state backup: ${backupPath}.` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function quarantineCorruptState(reason: string, detail: string): void {
@@ -479,7 +528,7 @@ function loadState(): void {
     return;
   }
 
-  const { state, migrated, legacy } = migrateState(parsed);
+  const { state } = migrateState(parsed);
 
   if (Object.keys(state.profiles).length === 0) {
     quarantineCorruptState("did not contain a recognisable profile", "");
@@ -488,17 +537,6 @@ function loadState(): void {
 
   profiles = state.profiles;
   activeProfileName = state.activeProfile;
-  if (migrated) {
-    try {
-      preserveLegacyState(legacy);
-    } catch (err) {
-      console.error(
-        "MindVault MCP: failed to preserve legacy state before migration:",
-        safeErrorMessage(err),
-      );
-    }
-    saveState();
-  }
 }
 
 function persistableProfiles(): Record<string, WalletProfile> {
@@ -524,7 +562,7 @@ function saveState(): boolean {
       activeProfile: activeProfileName,
       profiles: persistableProfiles(),
     };
-    writeAtomically(STATE_FILE, JSON.stringify(state, null, 2), 0o600);
+    persistStateWithMigrationBackup(state);
     return true;
   } catch (err) {
     console.error("MindVault MCP: failed to persist state:", safeErrorMessage(err));
@@ -773,7 +811,9 @@ async function importWallet(args: {
       );
     }
     if (args.confirmAddress !== publicKey) {
-      throw new Error("Wallet not persisted. confirmAddress must exactly match the derived address.");
+      throw new Error(
+        "Wallet not persisted. confirmAddress must exactly match the derived address.",
+      );
     }
     const approval = pendingWalletImportApprovals.get(target);
     if (
@@ -800,7 +840,12 @@ async function importWallet(args: {
         `Address: ${publicKey}`,
         `Wallet persisted to ${STATE_FILE} (mode 0600).`,
       ].join("\n"),
-      structured: { profile: target, address: publicKey, network: selectedNetwork, persisted: true },
+      structured: {
+        profile: target,
+        address: publicKey,
+        network: selectedNetwork,
+        persisted: true,
+      },
     };
   }
 
@@ -2014,7 +2059,6 @@ async function browseOutcome(
   filters: CatalogFilters = {},
   bypassCache = false,
 ): Promise<ToolOutcome> {
-async function browseOutcome(filters: CatalogFilters = {}): Promise<ToolOutcome> {
   const resumed = applyCatalogCursor(filters, NETWORK);
   if (!resumed.ok) return resumed.error;
   filters = resumed.filters;
@@ -4138,6 +4182,8 @@ const STATE_MUTATING_TOOLS = new Set([
   "mindvault_royalty",
   "mindvault_reset",
   "mindvault_restore_state",
+  "mindvault_apply_state_migration",
+  "mindvault_import_state_selective",
   "mindvault_import_wallet",
   "mindvault_rotate_publisher_key",
   "mindvault_metrics",
@@ -4213,11 +4259,15 @@ async function dispatchToolOutcome(
         return listProfilesOutcome();
       case "mindvault_browse": {
         const parsed = parseCatalogFilters(rawRecord);
-        return parsed.ok ? browseOutcome(parsed.filters, resolveCacheBypass(rawRecord)) : parsed.error;
+        return parsed.ok
+          ? browseOutcome(parsed.filters, resolveCacheBypass(rawRecord))
+          : parsed.error;
       }
       case "mindvault_search": {
         const parsed = parseCatalogFilters(rawRecord, { requireCriteria: true });
-        return parsed.ok ? searchOutcome(parsed.filters, resolveCacheBypass(rawRecord)) : parsed.error;
+        return parsed.ok
+          ? searchOutcome(parsed.filters, resolveCacheBypass(rawRecord))
+          : parsed.error;
       }
       case "mindvault_preview":
         return preview(requiredString(args, "resourceId"), resolveCacheBypass(rawRecord));
@@ -4378,6 +4428,14 @@ async function dispatchToolOutcome(
         return resetState(flag(args, "all"), rawRecord.confirm);
       case "mindvault_backup_state":
         return backupState(requiredString(args, "passphrase"), rawRecord.confirm);
+      case "mindvault_preview_state_migration":
+        return previewStateMigrationTool();
+      case "mindvault_apply_state_migration":
+        return applyStateMigrationTool(rawRecord.confirm);
+      case "mindvault_export_state_selective":
+        return exportSelectiveStateTool();
+      case "mindvault_import_state_selective":
+        return importSelectiveStateTool(requiredString(args, "blob"));
       case "mindvault_resource_provenance":
         return provenanceChain(requiredString(args, "resourceId"));
       case "mindvault_resource_change_log":
