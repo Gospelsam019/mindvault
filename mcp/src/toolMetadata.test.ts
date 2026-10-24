@@ -47,6 +47,10 @@ const TOOL_SIDE_EFFECTS = {
   mindvault_tx_status: "none",
   mindvault_reset: "destructive",
   mindvault_backup_state: "local-write",
+  mindvault_preview_state_migration: "none",
+  mindvault_apply_state_migration: "local-write",
+  mindvault_export_state_selective: "none",
+  mindvault_import_state_selective: "local-write",
   mindvault_resource_provenance: "none",
   mindvault_resource_change_log: "none",
   mindvault_restore_state: "destructive",
@@ -149,7 +153,9 @@ describe("MCP tool metadata", () => {
 
     for (const tool of TOOL_DEFINITIONS) {
       const effect = TOOL_SIDE_EFFECTS[tool.name as keyof typeof TOOL_SIDE_EFFECTS];
-      expect(tool.annotations.readOnlyHint, `${tool.name} read-only effect`).toBe(effect === "none");
+      expect(tool.annotations.readOnlyHint, `${tool.name} read-only effect`).toBe(
+        effect === "none",
+      );
       expect(tool.annotations.destructiveHint, `${tool.name} destructive effect`).toBe(
         effect === "destructive",
       );

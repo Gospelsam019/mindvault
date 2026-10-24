@@ -258,9 +258,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "List resources in the MindVault catalog with the same optional filters as mindvault_search and GET /resources: keyword, price range, verification status, resource type, owner, sort, pagination, tags, and listed state. Sort accepts newest, price_asc, price_desc, or title; results are ordered client-side too, so the order holds even when the backend ignores the parameter.",
     inputSchema: {
       type: "object",
-      properties: { ...catalogFilterInputProperties, ...bypassCacheInputProperty },
       properties: {
         ...catalogFilterInputProperties,
+        ...bypassCacheInputProperty,
         cursor: CATALOG_CURSOR_INPUT_PROPERTY,
       },
       required: [],
@@ -1037,6 +1037,72 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
+    name: "mindvault_preview_state_migration",
+    description:
+      "Read ~/.mindvault/state.json and preview any legacy-to-v1 profile migration without changing it. Reports affected field paths and whether a private recovery backup will be created before applying.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    annotations: {
+      title: "Preview State Migration",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
+    name: "mindvault_apply_state_migration",
+    description:
+      "Apply the pending legacy-to-v1 profile migration after explicit confirmation. A mode-0600 copy of the original state file is created first; the atomic write leaves the original state intact if applying fails. Omit confirm to preview without writing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        confirm: {
+          type: "boolean",
+          description: "Required to apply the migration; omitted or false only previews it.",
+        },
+      },
+      required: [],
+    },
+    annotations: {
+      title: "Apply State Migration",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
+    name: "mindvault_export_state_selective",
+    description:
+      "Export a stable v1 JSON snapshot containing active profile, profile names, and network preferences only. Wallet public keys, private keys, seed phrases, and publisher API keys are excluded.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    annotations: {
+      title: "Export Selective State",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
+    name: "mindvault_import_state_selective",
+    description:
+      "Import a v1 selective state JSON snapshot. Merges profile names and network preferences while preserving existing wallets and publisher API keys; imported data cannot replace credentials.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        blob: {
+          type: "string",
+          description: "Versioned v1 JSON from mindvault_export_state_selective.",
+        },
+      },
+      required: ["blob"],
+    },
+    annotations: {
+      title: "Import Selective State",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
     name: "mindvault_resource_provenance",
     description:
       "Return the chronological creator, purchase, and ownership-transfer chain recorded for a resource. Never exposes wallet secrets or API keys.",
@@ -1569,11 +1635,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         network: {
           type: "string",
           enum: ["testnet", "mainnet"],
-          description: "Stellar network to bind to the profile. Must match the configured network to persist.",
+          description:
+            "Stellar network to bind to the profile. Must match the configured network to persist.",
         },
         confirmAddress: {
           type: "string",
-          description: "Exact public address returned by the verification call; required to persist.",
+          description:
+            "Exact public address returned by the verification call; required to persist.",
         },
         persist: {
           type: "boolean",
@@ -1685,7 +1753,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
           type: "integer",
           minimum: 1,
           maximum: 200,
-          description: "Maximum audit-log entries to include (1–200, default 100). Newest are kept.",
+          description:
+            "Maximum audit-log entries to include (1–200, default 100). Newest are kept.",
           examples: [50, 200],
         },
       },

@@ -64,13 +64,7 @@ import { StrKey } from "@stellar/stellar-sdk";
  *   - An empty array (`[]`) is valid and clears all tags from the resource.
  */
 export type ArgumentKind =
-  | "string"
-  | "enum"
-  | "flag"
-  | "hash"
-  | "tag_array"
-  | "string_array"
-  | "integer";
+  "string" | "enum" | "flag" | "hash" | "tag_array" | "string_array" | "integer";
 
 export interface ArgumentSpec {
   kind: ArgumentKind;
@@ -269,12 +263,13 @@ export const TOOL_ARGUMENT_SPECS: Record<string, ToolArgumentSpec> = {
     network: { kind: "enum", values: ["testnet", "mainnet"], required: true },
   },
   mindvault_list_profiles: {},
-  mindvault_browse: { ...CATALOG_FILTER_ARGS, bypassCache: { kind: "flag" } },
+  mindvault_browse: {
+    ...CATALOG_FILTER_ARGS,
+    bypassCache: { kind: "flag" },
+    cursor: { kind: "string", maxLength: 512 },
+  },
   mindvault_search: { ...CATALOG_FILTER_ARGS, bypassCache: { kind: "flag" } },
   mindvault_preview: { resourceId: RESOURCE_ID, bypassCache: { kind: "flag" } },
-  mindvault_browse: { ...CATALOG_FILTER_ARGS, cursor: { kind: "string", maxLength: 512 } },
-  mindvault_search: { ...CATALOG_FILTER_ARGS },
-  mindvault_preview: { resourceId: RESOURCE_ID },
   mindvault_register: {
     name: { kind: "string", required: true, maxLength: 128 },
     email: {
@@ -399,13 +394,22 @@ export const TOOL_ARGUMENT_SPECS: Record<string, ToolArgumentSpec> = {
     confirmMainnet: CONFIRM_MAINNET,
   },
   mindvault_backup_state: { passphrase: PASSPHRASE, confirm: { kind: "flag" } },
+  mindvault_preview_state_migration: {},
+  mindvault_apply_state_migration: { confirm: { kind: "flag" } },
+  mindvault_export_state_selective: {},
+  mindvault_import_state_selective: {
+    blob: { kind: "string", required: true, maxLength: 131_072 },
+  },
   mindvault_resource_provenance: { resourceId: RESOURCE_ID },
   mindvault_resource_change_log: { resourceId: RESOURCE_ID },
   mindvault_restore_state: {
     blob: { kind: "string", required: true, maxLength: 1_048_576 },
     passphrase: PASSPHRASE,
   },
-  mindvault_metrics: { reset: { kind: "flag" } },
+  mindvault_metrics: {
+    reset: { kind: "flag" },
+    format: { kind: "enum", values: ["json", "otlp"] },
+  },
   mindvault_debug_bundle: {
     auditLogLines: { kind: "integer", min: 0, max: DEBUG_BUNDLE_MAX_AUDIT_LINES },
     includeEnvironment: { kind: "flag" },

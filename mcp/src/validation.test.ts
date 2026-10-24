@@ -80,10 +80,15 @@ const VALID_CALLS: Record<string, Record<string, unknown>> = {
   mindvault_registry_list: {},
   mindvault_registry_count: {},
   mindvault_compare_catalogs: { left: "testnet", right: "mainnet" },
-  mindvault_registry_count: {},
   mindvault_tx_status: { txHash: VALID_SHA256 },
   mindvault_reset: {},
   mindvault_backup_state: { passphrase: "correct-horse" },
+  mindvault_preview_state_migration: {},
+  mindvault_apply_state_migration: {},
+  mindvault_export_state_selective: {},
+  mindvault_import_state_selective: {
+    blob: '{"version":1,"activeProfile":"default","profiles":{"default":{}}}',
+  },
   mindvault_resource_provenance: { resourceId: "res-001" },
   mindvault_resource_change_log: { resourceId: "res-001" },
   mindvault_restore_state: { blob: "v1:abc", passphrase: "correct-horse" },
@@ -609,10 +614,10 @@ describe("catalog filter arguments", () => {
     expect(err.issues[0].message).toContain("sort");
   });
 
-  it("browse and search validate against the same argument names", () => {
-    expect(Object.keys(TOOL_ARGUMENT_SPECS.mindvault_browse).sort()).toEqual(
-      Object.keys(TOOL_ARGUMENT_SPECS.mindvault_search).sort(),
-    );
+  it("browse adds its cursor argument to the shared search filters", () => {
+    const browseArgs = Object.keys(TOOL_ARGUMENT_SPECS.mindvault_browse).sort();
+    const searchArgs = Object.keys(TOOL_ARGUMENT_SPECS.mindvault_search).sort();
+    expect(browseArgs).toEqual([...searchArgs, "cursor"].sort());
   });
 });
 
