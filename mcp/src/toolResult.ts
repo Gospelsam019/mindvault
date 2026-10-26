@@ -8,7 +8,7 @@
  * Failures stay on the CallTool `catch` path (`isError: true`, no payload).
  */
 
-import Ajv, { type AnySchema, type ValidateFunction } from "ajv";
+import { Ajv, type AnySchema, type ValidateFunction } from "ajv";
 import { logger } from "./logger.js";
 
 export type ToolOutcome = string | { text: string; structured?: Record<string, unknown> };
@@ -42,11 +42,10 @@ export function textFallback(text: string): Record<string, unknown> {
 }
 
 function validatorFor(schema: object): ValidateFunction {
-  let validator = compiledSchemas.get(schema);
-  if (!validator) {
-    validator = ajv.compile(schema as AnySchema);
-    compiledSchemas.set(schema, validator);
-  }
+  const cached = compiledSchemas.get(schema);
+  if (cached) return cached;
+  const validator = ajv.compile(schema as AnySchema);
+  compiledSchemas.set(schema, validator);
   return validator;
 }
 
@@ -55,7 +54,9 @@ export function outputValidationErrors(schema: object, value: unknown): string[]
   try {
     const validator = validatorFor(schema);
     if (validator(value)) return [];
-    return (validator.errors ?? []).map((error) => `${error.instancePath || "/"} (${error.keyword})`);
+    return (validator.errors ?? []).map(
+      (error) => `${error.instancePath || "/"} (${error.keyword})`,
+    );
   } catch {
     return ["schema compilation failed"];
   }

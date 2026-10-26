@@ -91,15 +91,30 @@ import {
 import { Keypair } from "@stellar/stellar-sdk";
 import { _setPurchasesFilePath } from "./purchaseHistory.js";
 import { trackPurchaseAttempt } from "./purchaseStatusLookup.js";
+import { normalizeSettlementWaitPolicy } from "./settlement.js";
+
+const TESTNET_USDC_ISSUER = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
 
 function mockResponse(data: unknown, ok = true, status = 200): Response {
-  const body = JSON.stringify(data);
+  const responseData =
+    typeof data === "object" && data !== null && "balances" in data &&
+    Array.isArray((data as { balances?: unknown }).balances)
+      ? {
+          ...(data as Record<string, unknown>),
+          balances: (data as { balances: any[] }).balances.map((balance) =>
+            balance.asset_code === "USDC" && balance.asset_issuer === undefined
+              ? { ...balance, asset_issuer: TESTNET_USDC_ISSUER }
+              : balance,
+          ),
+        }
+      : data;
+  const body = JSON.stringify(responseData);
   return {
     ok,
     status,
     statusText: ok ? "OK" : "Error",
     text: () => Promise.resolve(body),
-    json: () => Promise.resolve(data),
+    json: () => Promise.resolve(responseData),
     headers: new Headers({ "content-type": "application/json" }),
   } as Response;
 }
@@ -902,6 +917,7 @@ describe("txStatus", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it("returns a readable SUCCESS response with ledger and close time", async () => {
@@ -935,6 +951,43 @@ describe("txStatus", () => {
     expect(parsed.message).toContain("not found");
   });
 
+  it("watches a transaction through terminal status with monotonic progress", async () => {
+    vi.useFakeTimers();
+    let poll = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(
+        mockResponse({
+          result: {
+            status: poll++ === 0 ? "IN_PROGRESS" : "SUCCESS",
+            ledger: 123456,
+            createdAt: 1700000000,
+          },
+        }),
+      ),
+    );
+    const progress: number[] = [];
+    const pending = txStatus(
+      "abc123",
+      { wait: true, timeoutMs: 1000, intervalMs: 200 },
+      async (step) => {
+        progress.push(step);
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(200);
+    const parsed = JSON.parse(await pending);
+    expect(parsed).toMatchObject({
+      status: "SUCCESS",
+      hash: "abc123",
+      settled: true,
+      timedOut: false,
+      retryable: false,
+      attempts: 2,
+    });
+    expect(progress).toEqual([1, 2]);
+    vi.useRealTimers();
+  });
+
   it("returns a message for an empty hash without calling the RPC", async () => {
     const spy = vi.spyOn(globalThis, "fetch");
     const result = await txStatus("   ");
@@ -964,6 +1017,15 @@ describe("txStatus", () => {
         body: expect.stringContaining("getTransaction"),
       }),
     );
+  });
+});
+
+describe("settlement wait policy", () => {
+  it("supports explicit policies and rejects conflicts with the legacy wait flag", () => {
+    expect(normalizeSettlementWaitPolicy(undefined, "return_after_submit")).toBe(false);
+    expect(normalizeSettlementWaitPolicy(undefined, "wait_for_final_result")).toBe(true);
+    expect(normalizeSettlementWaitPolicy(true, "wait_for_final_result")).toBe(true);
+    expect(() => normalizeSettlementWaitPolicy(true, "return_after_submit")).toThrow(/conflicting/);
   });
 });
 
@@ -2078,6 +2140,33 @@ describe("wallet_info balance details", () => {
     expect(result).toContain("USDC Balance: 0");
     expect(result).toContain("USDC Status: no-trustline");
     expect(result).toContain("Note: USDC trustline not found");
+  });
+
+  it("ignores a counterfeit USDC symbol and reports the canonical issuer balance", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      mockResponse({
+        subentry_count: 2,
+        balances: [
+          {
+            asset_type: "credit_alphanum4",
+            asset_code: "USDC",
+            asset_issuer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            balance: "999.0",
+          },
+          {
+            asset_type: "credit_alphanum4",
+            asset_code: "USDC",
+            asset_issuer: TESTNET_USDC_ISSUER,
+            balance: "12.5",
+          },
+        ],
+      }),
+    );
+
+    const result = await walletInfo();
+    expect(result).toContain("USDC Balance: 12.5");
+    expect(result).not.toContain("USDC Balance: 999.0");
+    expect(result).toContain("USDC Status: funded");
   });
 
   it("distinguishes zero USDC balance (trustline exists with 0 balance)", async () => {

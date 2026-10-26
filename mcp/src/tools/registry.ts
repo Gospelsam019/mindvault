@@ -1,6 +1,7 @@
 import {
   createRegistryClient,
   Errors as RegistryErrors,
+  getNetworkPreset,
   listResources,
   type Resource,
 } from "@mindvault/registry-client";
@@ -95,8 +96,12 @@ export async function getBalanceDetails(publicKey: string): Promise<BalanceDetai
   const reserve = baseReserve + subentryCount * entryReserve;
   const available = Math.max(0, parseFloat(xlm) - reserve);
 
+  const usdcIssuer = getNetworkPreset(STELLAR_NETWORK).usdcClassicIssuer;
   const usdcBalance = balances.find(
-    (b: any) => b.asset_type === "credit_alphanum4" && b.asset_code === "USDC",
+    (b: any) =>
+      b.asset_type === "credit_alphanum4" &&
+      b.asset_code === "USDC" &&
+      b.asset_issuer === usdcIssuer,
   );
 
   if (!usdcBalance) {
