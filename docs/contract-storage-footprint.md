@@ -157,3 +157,13 @@ the deployment steps a storage-shape change implies, and the WASM size budget
 in
 [`contract/contracts/vault-registry/Makefile`](../contract/contracts/vault-registry/Makefile),
 which covers code size rather than storage.
+
+## Automated CI Reproduction & Budget Summary
+
+Run the footprint harness directly with:
+
+```bash
+cargo test -p vault-registry storage_footprint_report -- --nocapture
+```
+
+Every persistent and instance entry class is asserted against its byte budget ceiling (`key_bytes + value_bytes <= budget`) to prevent silent Soroban rent regressions.
