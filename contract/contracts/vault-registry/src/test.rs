@@ -1124,6 +1124,28 @@ fn register_with_hash_immutably_binds_metadata_pointer() {
 }
 
 #[test]
+fn register_with_hash_freezes_digest_pointer_without_content_hash() {
+    let (env, creator, client) = setup();
+    let id = String::from_str(&env, "pointerhash");
+    let metadata =
+        String::from_str(&env, "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789");
+
+    client.register_with_hash(&creator, &id, &100i128, &metadata, &empty_tags(&env), &None);
+
+    let divergent = String::from_str(&env, "ipfs://QmDifferent");
+    assert_eq!(
+        client.try_update_metadata(&id, &divergent),
+        Err(Ok(Error::MetadataFrozen))
+    );
+
+    let resource = client.get(&id);
+    assert_eq!(resource.metadata, metadata);
+    assert_eq!(resource.content_hash, None);
+    assert!(resource.frozen);
+    assert_eq!(resource.metadata_frozen_at, Some(env.ledger().sequence()));
+}
+
+#[test]
 fn register_with_hash_without_content_hash_keeps_metadata_mutable() {
     let (env, creator, client) = setup();
     let id = String::from_str(&env, "hashoptional");
