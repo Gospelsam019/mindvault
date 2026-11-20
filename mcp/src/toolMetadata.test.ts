@@ -18,6 +18,7 @@ type ToolSideEffect = "none" | "local-write" | "external-write" | "payment" | "d
 const TOOL_SIDE_EFFECTS = {
   mindvault_setup_wallet: "local-write",
   mindvault_wallet_info: "none",
+  mindvault_wallet_balances: "none",
   mindvault_repair_sponsored_account: "local-write",
   mindvault_use_profile: "local-write",
   mindvault_list_profiles: "none",

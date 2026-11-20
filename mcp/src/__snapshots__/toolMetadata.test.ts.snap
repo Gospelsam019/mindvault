@@ -4,6 +4,7 @@ exports[`MCP tool metadata > exposes the expected tool surface 1`] = `
 [
   "mindvault_setup_wallet",
   "mindvault_wallet_info",
+  "mindvault_wallet_balances",
   "mindvault_repair_sponsored_account",
   "mindvault_use_profile",
   "mindvault_list_profiles",

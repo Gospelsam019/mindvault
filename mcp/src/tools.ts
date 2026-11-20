@@ -162,6 +162,19 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
+    name: "mindvault_wallet_balances",
+    description:
+      "Operator tool: list XLM and USDC balances for every configured agent wallet (one per profile) plus the platform wallet (PLATFORM_WALLET_ADDRESS), so the two-wallet economy is visible in one call. Includes unique-wallet totals and a read-only spend summary for the active profile. Reads Horizon only; secrets are never returned and a single wallet failing to load does not fail the call.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    outputSchema: WALLET_BALANCES_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
+    annotations: {
+      title: "Wallet Balances",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
     name: "mindvault_repair_sponsored_account",
     description:
       "Repair a half-created sponsored account. Derives the address from a recovered secret key, re-fetches its Horizon balances, and restores the wallet to a local profile only when the on-chain account exists. The secret is never returned.",
