@@ -282,6 +282,7 @@ import {
 } from "./tools/publish.js";
 export { acceptTransfer, cancelTransfer };
 import { buyLease, leaseStatus } from "./tools/leases.js";
+import { subscribeResource } from "./resourceSubscriptionTool.js";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -4507,6 +4508,15 @@ async function dispatchToolOutcome(
         await requireCompatibleRegistry();
         return publishBatch(typedItems, onProgress);
       }
+      case "mindvault_subscribe_resource":
+        return subscribeResource(
+          requiredString(args, "resourceId"),
+          {
+            intervalMs: optionalNumber(args, "intervalMs"),
+            timeoutMs: optionalNumber(args, "timeoutMs"),
+            onProgress,
+          },
+        );
       case "mindvault_buy":
         return trackPurchaseAttempt(
           activeProfileName,

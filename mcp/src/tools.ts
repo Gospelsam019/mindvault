@@ -392,6 +392,35 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
+    name: "mindvault_subscribe_resource",
+    description:
+      "Subscribe to a resource and monitor for price, verification status, or listing changes. Emits notifications/progress updates when changes occur.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        resourceId: {
+          type: "string",
+          description: "Resource ID to monitor for changes.",
+        },
+        intervalMs: {
+          type: "integer",
+          description: "Polling interval in milliseconds (default: 5,000, min: 1,000).",
+        },
+        timeoutMs: {
+          type: "integer",
+          description: "Maximum monitoring duration in milliseconds (default: 60,000).",
+        },
+      },
+      required: ["resourceId"],
+    },
+    annotations: {
+      title: "Subscribe to Resource Changes",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
     name: "mindvault_publish",
     description:
       "Publish a link resource to the MindVault catalog. The resource undergoes AI verification (agent wallet pays ~$0.10 USDC via x402) and is automatically registered on-chain if verified. Returns resource ID, access URL, verification result, and on-chain registration status. Pass dryRun: true to validate inputs without creating a resource, calling /verify-content, or submitting payment; it may make free status and balance reads.",
