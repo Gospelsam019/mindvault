@@ -420,6 +420,7 @@ exports[`tool schema snapshots > mindvault_buy > annotations 1`] = `
 {
   "destructiveHint": false,
   "idempotentHint": false,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Buy Resource",
 }
@@ -691,6 +692,7 @@ exports[`tool schema snapshots > mindvault_buy_lease > annotations 1`] = `
 {
   "destructiveHint": false,
   "idempotentHint": false,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Buy Access Lease",
 }
@@ -2231,6 +2233,7 @@ exports[`tool schema snapshots > mindvault_freeze > annotations 1`] = `
 {
   "destructiveHint": true,
   "idempotentHint": true,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Freeze Metadata",
 }
@@ -2993,6 +2996,7 @@ exports[`tool schema snapshots > mindvault_publish > annotations 1`] = `
 {
   "destructiveHint": false,
   "idempotentHint": false,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Publish Resource",
 }
@@ -3017,7 +3021,7 @@ exports[`tool schema snapshots > mindvault_publish > input schema 1`] = `
       "type": "string",
     },
     "dryRun": {
-      "description": "Optional dry-run flag. When true, validates inputs and shows intended network, endpoint, and required wallet state without submitting payment or transactions.",
+      "description": "Optional dry-run flag. When true, validates inputs and shows intended network, endpoint, and required wallet state without creating a resource, calling /verify-content, submitting payment, or writing transactions.",
       "type": "boolean",
     },
     "externalUrl": {
@@ -3145,6 +3149,7 @@ exports[`tool schema snapshots > mindvault_publish_batch > annotations 1`] = `
 {
   "destructiveHint": false,
   "idempotentHint": false,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Publish Batch",
 }
@@ -3732,6 +3737,7 @@ exports[`tool schema snapshots > mindvault_register_onchain > annotations 1`] = 
 {
   "destructiveHint": false,
   "idempotentHint": false,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Register On-Chain",
 }
@@ -4322,6 +4328,7 @@ exports[`tool schema snapshots > mindvault_royalty > annotations 1`] = `
 {
   "destructiveHint": false,
   "idempotentHint": true,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Set Royalty Recipient",
 }
@@ -4670,6 +4677,7 @@ exports[`tool schema snapshots > mindvault_set_listed > annotations 1`] = `
 {
   "destructiveHint": false,
   "idempotentHint": true,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Set Listed",
 }
@@ -4804,6 +4812,7 @@ exports[`tool schema snapshots > mindvault_set_price > annotations 1`] = `
 {
   "destructiveHint": false,
   "idempotentHint": true,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Set Price",
 }
@@ -4939,6 +4948,7 @@ exports[`tool schema snapshots > mindvault_set_tags > annotations 1`] = `
 {
   "destructiveHint": false,
   "idempotentHint": true,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Set Tags",
 }
@@ -5168,6 +5178,7 @@ exports[`tool schema snapshots > mindvault_transfer_ownership > annotations 1`] 
 {
   "destructiveHint": false,
   "idempotentHint": false,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Transfer Ownership",
 }
@@ -5199,6 +5210,10 @@ exports[`tool schema snapshots > mindvault_transfer_ownership > input schema 1`]
       "maxLength": 64,
       "type": "string",
     },
+    "resetAttestation": {
+      "description": "When true, clear the resource's existing attestation hash in the same transfer so it can be re-verified.",
+      "type": "boolean",
+    },
     "resourceId": {
       "description": "The resource ID to transfer ownership of. Example: 'cm7x8y9z'",
       "examples": [
@@ -5206,10 +5221,6 @@ exports[`tool schema snapshots > mindvault_transfer_ownership > input schema 1`]
         "res-001",
       ],
       "type": "string",
-    },
-    "resetAttestation": {
-      "description": "When true, clear the resource's existing attestation hash in the same transfer so it can be re-verified.",
-      "type": "boolean",
     },
   },
   "required": [
@@ -5412,6 +5423,7 @@ exports[`tool schema snapshots > mindvault_update_metadata > annotations 1`] = `
 {
   "destructiveHint": false,
   "idempotentHint": true,
+  "openWorldHint": true,
   "readOnlyHint": false,
   "title": "Update Metadata",
 }

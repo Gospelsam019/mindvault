@@ -10,6 +10,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { TOOL_DEFINITIONS } from "./tools.js";
+import { paidOperationToolNames } from "./paidOperations.js";
 import { catalogFilterInputProperties } from "./catalogFilters.js";
 import { TEXT_ONLY_TOOLS } from "./outputSchemas.js";
 
@@ -165,6 +166,16 @@ describe("MCP tool metadata", () => {
       if (effect === "payment") {
         expect(tool.annotations.readOnlyHint, `${tool.name} can charge funds`).toBe(false);
       }
+    }
+  });
+
+  it("every paid tool is gate-able: not read-only, open-world, and advertises confirmPaid", () => {
+    for (const name of paidOperationToolNames()) {
+      const tool = TOOL_DEFINITIONS.find((t) => t.name === name);
+      expect(tool, `${name} is defined`).toBeDefined();
+      expect(tool?.annotations.readOnlyHint, `${name} is not read-only`).toBe(false);
+      expect(tool?.annotations.openWorldHint, `${name} openWorldHint`).toBe(true);
+      expect(tool?.inputSchema.properties.confirmPaid, `${name} confirmPaid`).toBeDefined();
     }
   });
 

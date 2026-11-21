@@ -102,6 +102,12 @@ export interface ToolAnnotations {
   destructiveHint: boolean;
   /** Repeating the tool with identical arguments is safe and yields the same result. */
   idempotentHint: boolean;
+  /**
+   * The tool interacts with an open world outside the local process (the Stellar
+   * network, x402 payment rails). Declared explicitly on every tool that spends
+   * USDC or network fees so clients can gate it.
+   */
+  openWorldHint?: boolean;
 }
 
 export interface ToolDefinition {
@@ -472,6 +478,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: true,
     },
   },
   {
@@ -509,6 +516,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
+      openWorldHint: true,
     },
   },
   {
@@ -557,6 +565,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: true,
     },
   },
   {
@@ -675,6 +684,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: true,
     },
   },
   {
@@ -1220,6 +1230,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: true,
     },
   },
   {
@@ -1259,6 +1270,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: true,
     },
   },
   {
@@ -1294,6 +1306,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: true,
     },
   },
   {
@@ -1340,6 +1353,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: true,
     },
   },
   {
@@ -1455,6 +1469,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: true,
     },
   },
   {
@@ -1490,6 +1505,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: true,
+      openWorldHint: true,
     },
   },
   {
@@ -1543,6 +1559,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: true,
     },
   },
   {
@@ -1940,6 +1957,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: true,
     },
   },
 ];
