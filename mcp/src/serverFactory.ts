@@ -344,3 +344,37 @@ export async function createAndStart(
 ): Promise<RunningServer> {
   return startServer(createMindVaultServer(behaviour, identity), transport, options);
 }
+
+
+/**
+ * Emits a copy-paste client configuration snippet for a detected profile (#179).
+ */
+export function emitProfileClientConfig(
+  profileName: string = "default",
+  clientType: "claude-desktop" | "cursor" | "vscode" = "claude-desktop",
+): Record<string, unknown> {
+  const serverPath = process.env.MINDVAULT_ENTRYPOINT || "mindvault-mcp";
+  const env = {
+    MINDVAULT_PROFILE: profileName,
+    MINDVAULT_NETWORK: process.env.MINDVAULT_NETWORK || "testnet",
+  };
+
+  if (clientType === "cursor" || clientType === "vscode") {
+    return {
+      name: "mindvault",
+      command: "node",
+      args: [serverPath],
+      env,
+    };
+  }
+
+  return {
+    mcpServers: {
+      mindvault: {
+        command: "node",
+        args: [serverPath],
+        env,
+      },
+    },
+  };
+}
