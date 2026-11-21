@@ -15,7 +15,7 @@ For structured JSON results (`structuredContent` + `outputSchema`) see
 For client installation and configuration see
 [mcp-client-configs.md](mcp-client-configs.md).
 
-**65 tools** as of last generation.
+**66 tools** as of last generation.
 
 > **Read-only mode:** when `MINDVAULT_READ_ONLY` is set, mutating tools
 > (`mindvault_buy`, `mindvault_setup_wallet`, `mindvault_use_profile`, …) are not
@@ -26,11 +26,12 @@ For client installation and configuration see
 
 ## Wallet
 
-| Tool                      | Description                                                                                                                                                                                                                                                                                                                                                           | Structured |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `mindvault_setup_wallet`  | Create a Stellar wallet using the sponsored account protocol. Optionally pass a profile name to create the wallet under a named profile (e.g. testnet, mainnet, publisher, buyer) and make it active; defaults to the active profile. The wallet (public key + secret key) is persisted to ~/.mindvault/state.json (mode 0600) and reloaded automatically on restart. | yes        |
-| `mindvault_wallet_info`   | Check the active profile name, its agent wallet address, USDC balance, and whether it is registered as a publisher.                                                                                                                                                                                                                                                   | yes        |
-| `mindvault_import_wallet` | Verify an imported Stellar wallet first, then persist it only after confirming its derived public address, profile, and configured network. The secret is never returned or included in errors.                                                                                                                                                                       | yes        |
+| Tool                        | Description                                                                                                                                                                                                                                                                                                                                                                                        | Structured |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `mindvault_setup_wallet`    | Create a Stellar wallet using the sponsored account protocol. Optionally pass a profile name to create the wallet under a named profile (e.g. testnet, mainnet, publisher, buyer) and make it active; defaults to the active profile. The wallet (public key + secret key) is persisted to ~/.mindvault/state.json (mode 0600) and reloaded automatically on restart.                              | yes        |
+| `mindvault_wallet_info`     | Check the active profile name, its agent wallet address, USDC balance, and whether it is registered as a publisher.                                                                                                                                                                                                                                                                                | yes        |
+| `mindvault_wallet_balances` | Operator tool: list XLM and USDC balances for every configured agent wallet (one per profile) plus the platform wallet (PLATFORM_WALLET_ADDRESS), so the two-wallet economy is visible in one call. Includes unique-wallet totals and a read-only spend summary for the active profile. Reads Horizon only; secrets are never returned and a single wallet failing to load does not fail the call. | yes        |
+| `mindvault_import_wallet`   | Verify an imported Stellar wallet first, then persist it only after confirming its derived public address, profile, and configured network. The secret is never returned or included in errors.                                                                                                                                                                                                    | yes        |
 
 ## Profiles
 
@@ -141,4 +142,4 @@ For client installation and configuration see
 
 ---
 
-_This file was generated from `mcp/src/tools.ts` — 65 tools._
+_This file was generated from `mcp/src/tools.ts` — 66 tools._

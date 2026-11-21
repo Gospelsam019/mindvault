@@ -5,12 +5,13 @@
 
 This file is a generated, human-readable summary of the MCP tool surface (ListTools). It is scoped to the `mcp/` package and intended as a quick reference for integrators and reviewers.
 
-Generated from `mcp/src/tools.ts` (65 tools).
+Generated from `mcp/src/tools.ts` (66 tools).
 
 ## Tools
 
 - `mindvault_setup_wallet`: Create a Stellar wallet using the sponsored account protocol. Optionally pass a profile name to create the wallet under a named profile (e.g. testnet, mainnet, publisher, buyer) and make it active; defaults to the active profile. The wallet (public key + secret key) is persisted to ~/.mindvault/state.json (mode 0600) and reloaded automatically on restart.
 - `mindvault_wallet_info`: Check the active profile name, its agent wallet address, USDC balance, and whether it is registered as a publisher.
+- `mindvault_wallet_balances`: Operator tool: list XLM and USDC balances for every configured agent wallet (one per profile) plus the platform wallet (PLATFORM_WALLET_ADDRESS), so the two-wallet economy is visible in one call. Includes unique-wallet totals and a read-only spend summary for the active profile. Reads Horizon only; secrets are never returned and a single wallet failing to load does not fail the call.
 - `mindvault_repair_sponsored_account`: Repair a half-created sponsored account. Derives the address from a recovered secret key, re-fetches its Horizon balances, and restores the wallet to a local profile only when the on-chain account exists. The secret is never returned.
 - `mindvault_use_profile`: Switch the active wallet profile, creating it if it does not exist. Profiles let one agent keep separate identities (e.g. testnet vs mainnet, publisher vs buyer); each has its own wallet and publisher API key. Subsequent tools operate on the active profile.
 - `mindvault_list_profiles`: List all named wallet profiles, marking the active one and showing each profile's wallet address and whether it is registered as a publisher. Secret keys are never shown.
