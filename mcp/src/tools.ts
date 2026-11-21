@@ -448,75 +448,37 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "mindvault_buy",
     description:
-      "Pay USDC via x402 and access a resource. Payments above MINDVAULT_MAX_AUTO_PAY_USDC (10 USDC by default) require maxAutoPayUsdc set to at least the resource price. On mainnet, pass confirmMainnet: true (or set MINDVAULT_ALLOW_MAINNET=1). Pass dryRun: true to validate the resource and show intended payment flow without submitting payment. Pass wait: true to poll the payment transaction until it settles on-chain before returning.",
+      "Pay USDC via x402 and access a resource. Payments above MINDVAULT_MAX_AUTO_PAY_USDC (10 USDC by default) require maxAutoPayUsdc set to at least the resource price. On mainnet, pass confirmMainnet: true. Pass confirmPaid: true to confirm paid operations.",
     inputSchema: {
       type: "object",
       properties: {
         resourceId: {
           type: "string",
-          description:
-            "The resource ID to buy, from mindvault_browse or mindvault_search. Letters, digits, dot, dash, or underscore.",
-          examples: ["cm7x8y9z", "swcn98besxpp6t1u8e77fqz3"],
+          description: "The resource ID to buy.",
         },
-        dryRun: {
+        confirmPaid: {
           type: "boolean",
-          description:
-            "Optional dry-run flag. When true, validates the resource ID and shows intended network, endpoint, and required wallet state without submitting payment.",
-        },
-        maxAutoPayUsdc: {
-          type: "string",
-          description:
-            "Explicit per-call maximum automatic payment in USDC. Required when this resource costs more than MINDVAULT_MAX_AUTO_PAY_USDC; must be at least the advertised price.",
-          examples: ["25.00"],
+          description: "Explicitly confirm authorization to execute this paid operation.",
         },
         confirmMainnet: {
           type: "boolean",
-          description:
-            "Required on mainnet (or set MINDVAULT_ALLOW_MAINNET=1). Explicitly confirm this mutation/payment on the public Stellar network.",
+          description: "Required on mainnet to confirm transaction execution.",
         },
-        confirmPaid: { ...CONFIRM_PAID_PROPERTY },
-        wait: {
+        maxAutoPayUsdc: {
+          type: "string",
+          description: "Explicit per-call maximum automatic payment in USDC.",
+        },
+        dryRun: {
           type: "boolean",
-          description:
-            "Optional flag. When true, wait and poll the payment transaction on Soroban until it settles (SUCCESS or FAILED) or the timeout elapses, returning a settlement confirmation block. Off by default, in which case the buy returns as soon as the payment response arrives.",
-        },
-        waitPolicy: {
-          type: "string",
-          enum: ["return_after_submit", "wait_for_final_result"],
-          description:
-            "Optional settlement policy. return_after_submit returns with the transaction hash immediately; wait_for_final_result polls until SUCCESS, FAILED, or timeout. The legacy wait flag remains supported.",
-        },
-        timeoutMs: {
-          type: "integer",
-          minimum: 0,
-          maximum: 300000,
-          description:
-            "Optional deadline in milliseconds for settlement confirmation when wait is true. Default 60000, inclusive maximum 300000.",
-          default: 60000,
-          examples: [30000, 60000],
-        },
-        intervalMs: {
-          type: "integer",
-          minimum: 200,
-          description:
-            "Optional interval in milliseconds between settlement status polls when wait is true. Default 2000, minimum 200.",
-          default: 2000,
-          examples: [500, 2000],
-        },
-        idempotencyKey: {
-          type: "string",
-          description:
-            "Optional client-chosen key (letters, digits, dot, dash, underscore, colon; max 128). When set, the attempt is recorded so mindvault_purchase_status can resolve it if the response is lost. A key that already settled is not paid again.",
-          examples: ["buy-cm7x8y9z-2026-01-01"],
+          description: "Dry-run flag.",
         },
       },
       required: ["resourceId"],
     },
-    outputSchema: BUY_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
     annotations: {
-      title: "Buy Resource",
+      title: "Buy Resource (Paid)",
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
     },
   },
