@@ -2614,9 +2614,10 @@ impl VaultRegistry {
         let owned = Self::creator_count(&env, &resource.creator);
         Self::set_creator_count(&env, &resource.creator, owned.saturating_sub(1));
 
-        env.storage()
-            .persistent()
-            .remove(&DataKey::PendingTransfer(id.clone()));
+        let pending_transfer_key = DataKey::PendingTransfer(id.clone());
+        if env.storage().persistent().has(&pending_transfer_key) {
+            env.storage().persistent().remove(&pending_transfer_key);
+        }
         Self::transition_state(&env, &mut resource, ResourceState::Tombstoned);
         Ok(())
     }
