@@ -173,6 +173,24 @@ The default SHA-256 result is `sha256:<64 lowercase hex>`. Legacy untagged
 SHA-256 receipts remain compatible, while different algorithms or encoding
 versions do not verify as collisions.
 
+### Contract lifecycle and fee routing
+
+The on-chain registry lifecycle is exposed separately from the off-chain
+verification status:
+
+- `Listed` and `Delisted` are controlled by the creator.
+- `Frozen` requires creator reactivation or an admin dispute/tombstone action.
+- `Disputed` can be resolved by an admin back to `Listed`, `Delisted`, or
+  `Frozen`.
+- `Tombstoned` is terminal and does not allow re-registration of the same id.
+
+For paid settlements, the optional fee destination configuration may route a
+portion of the computed platform fee to `Burn` or `Charity(address)`. The
+configuration is registry-scoped, emitted through `setdest`, and previewable
+with `preview_fee_split` or `preview_fee_split_for_resource`. A partial route
+requires a fee recipient for the remainder; a 100% route may leave the
+recipient unset.
+
 ### Previewing an anchor before buying
 
 `mindvault_preview_metadata_hash` reads the same on-chain pointer and reports

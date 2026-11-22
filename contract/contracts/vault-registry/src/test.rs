@@ -1136,6 +1136,52 @@ fn register_with_hash_without_content_hash_keeps_metadata_mutable() {
 }
 
 #[test]
+fn register_with_hash_validates_content_hash_length_bounds() {
+    let (env, creator, client) = setup();
+
+    assert_eq!(
+        client.try_register_with_hash(
+            &creator,
+            &String::from_str(&env, "hashempty"),
+            &100i128,
+            &String::from_str(&env, "ipfs://QmEmpty"),
+            &empty_tags(&env),
+            &Some(String::from_str(&env, "")),
+        ),
+        Err(Ok(Error::ContentHashTooLong))
+    );
+
+    let overlong = "a".repeat(MAX_CONTENT_HASH_LEN as usize + 1);
+    assert_eq!(
+        client.try_register_with_hash(
+            &creator,
+            &String::from_str(&env, "hashlong"),
+            &100i128,
+            &String::from_str(&env, "ipfs://QmLong"),
+            &empty_tags(&env),
+            &Some(String::from_str(&env, &overlong)),
+        ),
+        Err(Ok(Error::ContentHashTooLong))
+    );
+
+    let at_limit = "a".repeat(MAX_CONTENT_HASH_LEN as usize);
+    client.register_with_hash(
+        &creator,
+        &String::from_str(&env, "hashlimit"),
+        &100i128,
+        &String::from_str(&env, "ipfs://QmLimit"),
+        &empty_tags(&env),
+        &Some(String::from_str(&env, &at_limit)),
+    );
+    assert_eq!(
+        client
+            .get(&String::from_str(&env, "hashlimit"))
+            .content_hash,
+        Some(String::from_str(&env, &at_limit))
+    );
+}
+
+#[test]
 fn ownership_can_transfer() {
     let (env, creator, client) = setup();
     let id = String::from_str(&env, "r3");
