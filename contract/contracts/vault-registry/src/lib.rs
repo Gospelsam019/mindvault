@@ -1505,10 +1505,11 @@ impl VaultRegistry {
         Self::register_internal(env, creator, id, price, metadata, tags, None, None)
     }
 
-    /// Register a new resource together with an immutable digest of its
-    /// off-chain content. Supplying a hash binds the metadata pointer to this
-    /// registration: `update_metadata` cannot change it afterward. Passing
-    /// `None` preserves the mutable metadata behavior of `register`.
+    /// Register a new resource together with an optional immutable digest of
+    /// its off-chain content. Supplying a content hash binds the metadata
+    /// pointer to this registration. A direct `sha256:` or `sha-256:` metadata
+    /// pointer is also immutable even when `content_hash` is `None`. Other
+    /// pointers remain mutable when no content hash is supplied.
     ///
     /// Rejects an empty hash or one longer than `MAX_CONTENT_HASH_LEN`
     /// (`ContentHashTooLong`). All other validation matches `register`.
@@ -6042,6 +6043,11 @@ impl VaultRegistry {
             || eq_ignore_case(b"system")
     }
 
+    fn is_digest_metadata_pointer(metadata: &String) -> bool {
+        let bytes = Self::string_bytes(metadata);
+        bytes.starts_with(b"sha256:") || bytes.starts_with(b"sha-256:")
+    }
+
     fn validate_metadata_pointer(metadata: &String) -> Result<(), Error> {
         Self::validate_bounded_string(
             metadata,
@@ -7021,6 +7027,7 @@ impl VaultRegistry {
             .ok_or(Error::CountOverflow)?;
 
         let now = env.ledger().sequence();
+        let digest_metadata_pointer = Self::is_digest_metadata_pointer(&metadata);
         let resource = Resource {
             id: id.clone(),
             creator: creator.clone(),
@@ -7030,8 +7037,12 @@ impl VaultRegistry {
             state: ResourceState::Listed,
             tags: norm_tags.clone(),
             verified: VerificationStatus::Pending,
-            frozen: false,
-            metadata_frozen_at: None,
+            frozen: digest_metadata_pointer,
+            metadata_frozen_at: if digest_metadata_pointer {
+                Some(now)
+            } else {
+                None
+            },
             created_at: now,
             updated_at: now,
             dispute_flag: DisputeFlag::NoFlag,

@@ -1249,7 +1249,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "mindvault_update_metadata",
     description:
-      "Update the on-chain metadata pointer for a registered resource in the vault registry contract. Only the resource creator/owner may call this. Validates the pointer length and format (must start with ipfs://, ar://, http(s)://, sha256:, sha-256:, or 0x and be at most 512 characters) client-side before signing and submitting.",
+      "Update the on-chain metadata pointer for a registered resource in the vault registry contract. Only the resource creator/owner may call this. Fails if the pointer was frozen, the resource was registered with a content hash, or it was registered with a direct sha256:/sha-256: metadata pointer. Validates the pointer length and format (must start with ipfs://, ar://, http(s)://, sha256:, sha-256:, or 0x and be at most 512 characters) client-side before signing and submitting.",
     inputSchema: {
       type: "object",
       properties: {

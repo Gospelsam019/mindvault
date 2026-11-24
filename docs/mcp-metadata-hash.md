@@ -147,6 +147,10 @@ When publishing content that must not move after registration, the contract
 `update_metadata` and `set_metadata_pointers` return `MetadataFrozen`. Passing
 `None` preserves the existing mutable registration behavior.
 
+When `metadata` itself is a direct `sha256:` or `sha-256:` pointer,
+`register_with_hash` freezes it even if `content_hash` is `None`. Other pointer
+formats remain mutable when no content hash is supplied.
+
 MCP and TypeScript clients should verify the canonical content hash locally
 before registration and use `mindvault_preview_metadata_hash` or the contract
 `get` result to audit the on-chain anchor afterward.
@@ -172,6 +176,24 @@ The expected preimage is:
 The default SHA-256 result is `sha256:<64 lowercase hex>`. Legacy untagged
 SHA-256 receipts remain compatible, while different algorithms or encoding
 versions do not verify as collisions.
+
+### Contract lifecycle and fee routing
+
+The on-chain registry lifecycle is exposed separately from the off-chain
+verification status:
+
+- `Listed` and `Delisted` are controlled by the creator.
+- `Frozen` requires creator reactivation or an admin dispute/tombstone action.
+- `Disputed` can be resolved by an admin back to `Listed`, `Delisted`, or
+  `Frozen`.
+- `Tombstoned` is terminal and does not allow re-registration of the same id.
+
+For paid settlements, the optional fee-destination configuration may route a
+portion of the computed platform fee to `Burn` or `Charity(address)`. The
+configuration is registry-scoped, emitted through `setdest`, and previewable
+with `preview_fee_split` or `preview_fee_split_for_resource`. A partial route
+requires a fee recipient for the remainder; a 100% route may leave the
+recipient unset.
 
 ### Previewing an anchor before buying
 

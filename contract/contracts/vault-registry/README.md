@@ -730,8 +730,8 @@ const tx = await registry.register({
 });
 await tx.signAndSend();
 
-// Immutable metadata variant: a supplied content hash freezes the metadata
-// pointer at registration and rejects later pointer changes.
+// Immutable metadata variant: a supplied content hash or direct SHA-256
+// metadata pointer freezes the pointer at registration.
 const immutableTx = await registry.register_with_hash({
   creator: "GB6LGS25QN3DFNXKFWCTKB3FMKZFLW7OIKCX6HJKKIEPV3H2JJKBIMHV",
   id: "swcn98besxpp6t1u8e77fqz3",

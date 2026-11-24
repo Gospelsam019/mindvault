@@ -1124,6 +1124,46 @@ fn register_with_hash_immutably_binds_metadata_pointer() {
 }
 
 #[test]
+fn register_with_hash_freezes_digest_pointer_without_content_hash() {
+    let (env, creator, client) = setup();
+    let id = String::from_str(&env, "pointerhash");
+    let metadata =
+        String::from_str(&env, "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789");
+
+    client.register_with_hash(&creator, &id, &100i128, &metadata, &empty_tags(&env), &None);
+
+    let divergent = String::from_str(&env, "ipfs://QmDifferent");
+    assert_eq!(
+        client.try_update_metadata(&id, &divergent),
+        Err(Ok(Error::MetadataFrozen))
+    );
+
+    let resource = client.get(&id);
+    assert_eq!(resource.metadata, metadata);
+    assert_eq!(resource.content_hash, None);
+    assert!(resource.frozen);
+    assert_eq!(resource.metadata_frozen_at, Some(env.ledger().sequence()));
+
+    let sha_dash_id = String::from_str(&env, "pointerhashdash");
+    let sha_dash_metadata = String::from_str(
+        &env,
+        "sha-256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    );
+    client.register_with_hash(
+        &creator,
+        &sha_dash_id,
+        &100i128,
+        &sha_dash_metadata,
+        &empty_tags(&env),
+        &None,
+    );
+    assert_eq!(
+        client.try_update_metadata(&sha_dash_id, &divergent),
+        Err(Ok(Error::MetadataFrozen))
+    );
+}
+
+#[test]
 fn register_with_hash_without_content_hash_keeps_metadata_mutable() {
     let (env, creator, client) = setup();
     let id = String::from_str(&env, "hashoptional");
@@ -1133,6 +1173,52 @@ fn register_with_hash_without_content_hash_keeps_metadata_mutable() {
     let updated = String::from_str(&env, "ipfs://QmUpdated");
     client.update_metadata(&id, &updated);
     assert_eq!(client.get(&id).metadata, updated);
+}
+
+#[test]
+fn register_with_hash_validates_content_hash_length_bounds() {
+    let (env, creator, client) = setup();
+
+    assert_eq!(
+        client.try_register_with_hash(
+            &creator,
+            &String::from_str(&env, "hashempty"),
+            &100i128,
+            &String::from_str(&env, "ipfs://QmEmpty"),
+            &empty_tags(&env),
+            &Some(String::from_str(&env, "")),
+        ),
+        Err(Ok(Error::ContentHashTooLong))
+    );
+
+    let overlong = "a".repeat(MAX_CONTENT_HASH_LEN as usize + 1);
+    assert_eq!(
+        client.try_register_with_hash(
+            &creator,
+            &String::from_str(&env, "hashlong"),
+            &100i128,
+            &String::from_str(&env, "ipfs://QmLong"),
+            &empty_tags(&env),
+            &Some(String::from_str(&env, &overlong)),
+        ),
+        Err(Ok(Error::ContentHashTooLong))
+    );
+
+    let at_limit = "a".repeat(MAX_CONTENT_HASH_LEN as usize);
+    client.register_with_hash(
+        &creator,
+        &String::from_str(&env, "hashlimit"),
+        &100i128,
+        &String::from_str(&env, "ipfs://QmLimit"),
+        &empty_tags(&env),
+        &Some(String::from_str(&env, &at_limit)),
+    );
+    assert_eq!(
+        client
+            .get(&String::from_str(&env, "hashlimit"))
+            .content_hash,
+        Some(String::from_str(&env, &at_limit))
+    );
 }
 
 #[test]
